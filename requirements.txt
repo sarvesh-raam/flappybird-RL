@@ -1,0 +1,7 @@
+gymnasium
+stable-baselines3[extra]
+flappy-bird-gymnasium
+pygame
+numpy
+matplotlib
+opencv-python
