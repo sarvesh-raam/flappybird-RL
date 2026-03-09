@@ -13,6 +13,11 @@ ENV/
 # Project specific
 logs/
 models/
-*.zip
+models_v2/
+models_ppo/
 *.mp4
+
+# Allow final trained models
+!flappy_ppo_final.zip
+!legacy_models/*.zip
 requirements.txt.resolved
