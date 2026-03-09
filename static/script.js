@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let tabVisible = true;
     let pendingAction = null;
-    let syncInterval = 100; // Default 10 FPS (Safe Zone for HF)
+    let syncInterval = 70; // 14 FPS - Optimal balance for free-tier HF
 
     document.addEventListener('visibilitychange', () => { tabVisible = !document.hidden; });
 
@@ -30,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); pendingAction = 'flap'; } });
     window.addEventListener('touchstart', (e) => { if (e.target.id === 'game-stream') { e.preventDefault(); pendingAction = 'flap'; } }, { passive: false });
 
-    // Adaptive Unified Sync Loop
     async function pollSync() {
         if (!tabVisible) {
             setTimeout(pollSync, 1000);
@@ -40,24 +39,19 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const startTime = Date.now();
             let url = '/sync?t=' + startTime;
-
-            // ATTACH ACTION TO SYNC (Turbo-Sync v4)
-            // One request handles both movement and action
             if (pendingAction) {
                 url += '&act=' + pendingAction;
                 pendingAction = null;
             }
 
             const res = await fetch(url);
-            if (!res.ok) throw new Error('429 or Server Busy');
+            if (!res.ok) throw new Error('429');
 
-            // 1. Update Image
             const blob = await res.blob();
             const oldUrl = gameImg.src;
             gameImg.src = URL.createObjectURL(blob);
             if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
 
-            // 2. Update Stats (Headers)
             scoreH.innerText = res.headers.get('X-Score-H');
             scoreA.innerText = res.headers.get('X-Score-A');
             bestH.innerText = res.headers.get('X-Best-H');
@@ -73,13 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 overlay.classList.add('hidden');
             }
 
-            // 3. Rate Limit Protection
-            // Keep at 10-12 FPS to stay under Hugging Face's radar
             const elapsed = Date.now() - startTime;
-            setTimeout(pollSync, Math.max(10, syncInterval - elapsed));
+            setTimeout(pollSync, Math.max(5, syncInterval - elapsed));
         } catch (e) {
-            // Cool down on error (Hugging Face is likely rate-limiting)
-            console.error("Network Throttling - Waiting for cool down...");
             setTimeout(pollSync, 2000);
         }
     }

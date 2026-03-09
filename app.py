@@ -1,5 +1,5 @@
 import os
-# SYNC TRIGGER - Turbo-Sync v4 (Sync-Priority Mode)
+# SYNC TRIGGER - Turbo-Sync v5 (Ultra-Smooth Logic Lock)
 import logging
 import threading
 import time
@@ -49,11 +49,12 @@ class GameState:
 
 game = GameState()
 
-# --- GAME LOOP ---
-def game_loop():
+# --- DEDICATED LOGIC THREAD (Locked at 30Hz) ---
+def physics_loop():
     global game
     while True:
-        start = time.time()
+        loop_start = time.time()
+        
         with game.lock:
             running = game.is_running
             flap = game.flap_human
@@ -62,51 +63,57 @@ def game_loop():
             d_a = game.done_a
         
         if running:
-            # AI
+            # 1. AI Logic
             ai_act = 0
             if not d_a and game.model:
                 try: ai_act, _ = game.model.predict(game.obs_a, deterministic=True)
                 except: pass
             
-            # Step
+            # 2. Step Environments
             if not d_h:
-                game.obs_h, _, term_h, trunc_h, info_h = game.env_h.step(1 if flap else 0)
-                game.score_h = info_h.get("score", 0)
+                game.obs_h, _, t_h, tr_h, i_h = game.env_h.step(1 if flap else 0)
+                game.score_h = i_h.get("score", 0)
                 if game.score_h > game.best_h: game.best_h = game.score_h
-                if term_h or trunc_h: game.done_h = True
+                if t_h or tr_h: game.done_h = True
             
             if not d_a:
-                game.obs_a, _, term_a, trunc_a, info_a = game.env_a.step(ai_act)
-                game.score_a = info_a.get("score", 0)
+                game.obs_a, _, t_a, tr_a, i_a = game.env_a.step(ai_act)
+                game.score_a = i_a.get("score", 0)
                 if game.score_a > game.best_a: game.best_a = game.score_a
-                if term_a or trunc_a: game.done_a = True
+                if t_a or tr_a: game.done_a = True
 
             if game.done_h and game.done_a:
                 game.is_running = False
 
-        # Render
-        fh = game.env_h.render()
-        fa = game.env_a.render()
-        if fh is not None and fa is not None:
-            comb = np.ascontiguousarray(np.hstack((fh, fa)))
-            h, w, _ = comb.shape
-            cv2.line(comb, (w // 2, 0), (w // 2, h), (255, 255, 255), 2)
-            bgr = cv2.cvtColor(comb, cv2.COLOR_RGB2BGR)
-            # Efficient Compression for HF
-            ret, buf = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-            if ret: game.latest_frame = buf.tobytes()
+        # Sleep to maintain precisely 30 FPS logic
+        time.sleep(max(0.001, 0.0333 - (time.time() - loop_start)))
 
-        time.sleep(max(0.005, 0.03 - (time.time() - start)))
-
-# --- UNIFIED SYNC ROUTE ---
-@app.route('/sync')
-def unified_sync():
-    """Sync state and return binary image in ONE request to avoid 429."""
+# --- DEDICATED RENDER THREAD (Runs in background) ---
+def render_loop():
     global game
-    
-    # Handle Flap/Start if passed in query (latency optimization)
-    action_type = request.args.get('act')
-    if action_type == 'flap':
+    while True:
+        try:
+            fh = game.env_h.render()
+            fa = game.env_a.render()
+            if fh is not None and fa is not None:
+                # Combine
+                comb = np.ascontiguousarray(np.hstack((fh, fa)))
+                # LAG KILLER: Resize to 50% for 4x faster transmission
+                h, w, _ = comb.shape
+                resized = cv2.resize(comb, (w // 2, h // 2), interpolation=cv2.INTER_LINEAR)
+                
+                bgr = cv2.cvtColor(resized, cv2.COLOR_RGB2BGR)
+                ret, buf = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                if ret: game.latest_frame = buf.tobytes()
+        except: pass
+        time.sleep(0.04) # Render at ~25 FPS
+
+# --- UNIFIED SYNC ---
+@app.route('/sync')
+def sync():
+    global game
+    act = request.args.get('act')
+    if act == 'flap':
         with game.lock:
             if game.is_running and not game.done_h:
                 game.flap_human = True
@@ -116,13 +123,11 @@ def unified_sync():
                 game.done_h = False; game.done_a = False
                 game.is_running = True
 
-    if not game.latest_frame:
-        return make_response(b'', 404)
+    if not game.latest_frame: return make_response(b'', 404)
     
     resp = make_response(game.latest_frame)
     resp.headers['Content-Type'] = 'image/jpeg'
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-    # Core state in headers
     resp.headers['X-Score-H'] = str(game.score_h)
     resp.headers['X-Score-A'] = str(game.score_a)
     resp.headers['X-Best-H'] = str(game.best_h)
@@ -134,9 +139,7 @@ def unified_sync():
 @app.route('/')
 def index(): return render_template('index.html')
 
-@app.route('/leaderboard')
-def lb(): return jsonify(board=[])
-
 if __name__ == '__main__':
-    threading.Thread(target=game_loop, daemon=True).start()
+    threading.Thread(target=physics_loop, daemon=True).start()
+    threading.Thread(target=render_loop, daemon=True).start()
     app.run(host='0.0.0.0', port=7860, threaded=True)
