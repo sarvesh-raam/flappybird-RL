@@ -185,6 +185,7 @@ def game_loop():
                         if running:
                             game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
                             if len(game.history) > 5: game.history.pop(0)
+                        
                         game.is_running = False
                         
                         # Fix: reset birds immediately so they are back at the top on the Ready screen
@@ -197,26 +198,28 @@ def game_loop():
             if f_h is not None and f_a is not None:
                 # Merge full resolution
                 combined = np.hstack((f_h, f_a))
-                # Ensure memory layout is compatible with OpenCV (especially for newer versions on Linux)
+                # Ensure memory layout
                 combined = np.ascontiguousarray(combined)
                 
                 # Draw the divider
                 h, w, _ = combined.shape
-                cv2.line(combined, (w // 2, 0), (w // 2, h), (180, 180, 180), 2)
+                cv2.line(combined, (w // 2, 0), (w // 2, h), (255, 255, 255), 2)
                 
                 bgr = cv2.cvtColor(combined, cv2.COLOR_RGB2BGR)
+                # Restored 90 quality as requested
                 ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                 if ret:
                     game.latest_frame = buffer.tobytes()
+
 
 
         except Exception as e:
             logger.error(f"FATAL GAME LOOP ERROR: {e}")
             time.sleep(1) 
             
-        # Target ~50hz loop for ultra fluidity
+        # Target ~35hz loop for better web control
         elapsed = time.time() - loop_start
-        sleep_time = max(0.002, 0.02 - elapsed)
+        sleep_time = max(0.005, 0.028 - elapsed)
         time.sleep(sleep_time)
 
 @app.route('/')
@@ -229,7 +232,8 @@ def gen_frames():
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        time.sleep(0.03) # Match loop speed roughly
+        # Independent streaming speed
+        time.sleep(0.04)
 
 @app.route('/video_feed')
 def video_feed():
@@ -247,9 +251,8 @@ def action():
                 if not game.done_h: game.flap_human = True
                 else: game.reset_h = True
             else:
-                # Fresh Start
-                logger.info(f"Starting new round for player: {game.player_name}")
-                # birds are already reset by the end of round logic, but let's be sure
+                # Start round
+                logger.info(f"Tournament Start: {game.player_name}")
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
                 game.score_h = game.score_a = 0
@@ -258,6 +261,8 @@ def action():
                 game.human_attempts += 1
                 game.total_ai_runs += 1
                 game.is_running = True
+                # Tiny breather for first frame
+                time.sleep(0.1)
     elif atype == 'set_name':
         game.player_name = data.get('name', 'Guest')
         logger.info(f"Name set: {game.player_name}")
