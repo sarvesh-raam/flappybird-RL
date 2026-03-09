@@ -107,66 +107,64 @@ game = GameState()
 def game_loop():
     global game
     while True:
-        with game.lock:
-            if game.is_running:
-                # AI Logic
-                if not game.done_a:
-                    action_ai, _ = game.model.predict(game.obs_a, deterministic=True)
-                    game.obs_a, _, term_a, trunc_a, info_a = game.env_ai.step(action_ai)
+        # --- 1. AI & ENV LOGIC (NO LOCK) ---
+        ai_action = None
+        human_action = 0
+        
+        if game.is_running:
+            if not game.done_a:
+                ai_action, _ = game.model.predict(game.obs_a, deterministic=True)
+            if game.flap_human:
+                human_action = 1
+                game.flap_human = False
+        
+        if game.is_running:
+            # Step AI
+            if not game.done_a:
+                game.obs_a, _, term_a, trunc_a, info_a = game.env_ai.step(ai_action)
+                with game.lock:
                     game.score_a = info_a.get("score", 0)
                     game.done_a = term_a or trunc_a
                     if game.score_a > game.best_a: game.best_a = game.score_a
-                else:
-                    # AI Round Finished - but we keep running for human
-                    if game.total_ai_runs > len(game.history): # Only add once
+                    if game.done_a:
                         game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
                         if len(game.history) > 5: game.history.pop(0)
+                        game.is_running = False
 
-                # Human Logic
+            # Step Human
+            if not game.done_h:
                 if game.reset_h:
                     game.obs_h, _ = game.env_human.reset()
                     game.score_h = 0
                     game.done_h = False
                     game.human_attempts += 1
                     game.reset_h = False
-
-                if not game.done_h:
-                    action_h = 1 if game.flap_human else 0
-                    game.obs_h, _, term_h, trunc_h, info_h = game.env_human.step(action_h)
+                
+                game.obs_h, _, term_h, trunc_h, info_h = game.env_human.step(human_action)
+                with game.lock:
                     game.score_h = info_h.get("score", 0)
                     game.done_h = term_h or trunc_h
                     if game.score_h > game.human_best_this_round: game.human_best_this_round = game.score_h
                     if game.score_h > game.best_h: game.best_h = game.score_h
-                    game.flap_human = False
-                
-                if game.done_a:
-                    game.is_running = False
 
-            # --- OPTIMIZED FOR HOSTING (KOYEB/RENDER) ---
-            try:
-                frame_h = game.env_human.render()
-                frame_a = game.env_ai.render()
-                if frame_h is not None and frame_a is not None:
-                    # Combine frames
-                    combined = np.hstack((frame_h, frame_a))
-                    
-                    # DOWNSCALE (50% size) = 400% Faster Video
-                    h, w, _ = combined.shape
-                    small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
-                    
-                    sh, sw, _ = small.shape
-                    cv2.line(small, (sw // 2, 0), (sw // 2, sh), (180, 180, 180), 1)
-                    
-                    bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
-                    # QUALITY 50 = Smooth gameplay, low lag
-                    ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
-                    if ret:
-                        game.latest_frame = buffer.tobytes()
-            except Exception as e:
-                pass 
+        # --- 2. RENDERING (NO LOCK) ---
+        try:
+            frame_h = game.env_human.render()
+            frame_a = game.env_ai.render()
+            if frame_h is not None and frame_a is not None:
+                combined = np.hstack((frame_h, frame_a))
+                h, w, _ = combined.shape
+                small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
+                sh, sw, _ = small.shape
+                cv2.line(small, (sw // 2, 0), (sw // 2, sh), (180, 180, 180), 1)
+                bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
+                ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 40])
+                if ret:
+                    game.latest_frame = buffer.tobytes()
+        except:
+            pass
 
-        # 40 FPS target - smooth and stable for cloud servers
-        time.sleep(1/40)
+        time.sleep(1/30)
 
 @app.route('/')
 def index():
@@ -175,15 +173,10 @@ def index():
 def gen_frames():
     global game
     while True:
-        # Always serve the current frame at 30fps to the browser 
-        # to ensure it's NEVER blank on load.
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        else:
-            # If no frame yet, wait a bit
-            time.sleep(0.1)
-        time.sleep(1/30) # Steady stream for browser stability
+        time.sleep(1/25)
 
 @app.route('/video_feed')
 def video_feed():
@@ -194,38 +187,29 @@ def action():
     global game
     data = request.json
     atype = data.get('type')
-    with game.lock:
-        if atype == 'flap':
-            if game.is_running:
-                if not game.done_h: game.flap_human = True
-                else: game.reset_h = True
-            else:
+    if atype == 'flap':
+        if game.is_running:
+            if not game.done_h: game.flap_human = True
+            else: game.reset_h = True
+        else:
+            with game.lock:
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
                 game.score_h = game.score_a = 0
                 game.done_h = game.done_a = False
                 game.human_best_this_round = 0
-                game.human_attempts = 1
+                game.human_attempts += 1
                 game.total_ai_runs += 1
                 game.is_running = True
-                game.model = load_model()
-        elif atype == 'set_name':
-            game.player_name = data.get('name', 'Guest')
+    elif atype == 'set_name':
+        game.player_name = data.get('name', 'Guest')
     return jsonify(success=True)
 
 @app.route('/submit_score', methods=['POST'])
 def submit_score():
     data = request.json
-    name = data.get('name')
-    score = data.get('score')
-    
-    # Simple check to avoid spamming identical scores for same player
-    board = load_leaderboard()
-    if any(e['name'] == name and e['score'] == score for e in board):
-        return jsonify(board=board)
-        
-    board = save_to_leaderboard(name, score)
-    return jsonify(board=board)
+    save_to_leaderboard(data.get('name'), data.get('score'))
+    return jsonify(board=load_leaderboard())
 
 @app.route('/leaderboard')
 def get_leaderboard():
@@ -233,23 +217,21 @@ def get_leaderboard():
 
 @app.route('/stats')
 def stats():
-    global game
-    with game.lock:
-        return jsonify({
-            "score_h": game.score_h,
-            "score_a": game.score_a,
-            "best_h": game.best_h,
-            "best_a": game.best_a,
-            "attempts": game.human_attempts,
-            "round": game.total_ai_runs,
-            "history": game.history,
-            "done_h": game.done_h,
-            "done_a": game.done_a,
-            "is_running": game.is_running,
-            "player_name": game.player_name
-        })
+    return jsonify({
+        "score_h": game.score_h,
+        "score_a": game.score_a,
+        "best_h": game.best_h,
+        "best_a": game.best_a,
+        "attempts": game.human_attempts,
+        "round": game.total_ai_runs,
+        "history": game.history,
+        "done_h": game.done_h,
+        "done_a": game.done_a,
+        "is_running": game.is_running,
+        "player_name": game.player_name
+    })
 
 if __name__ == '__main__':
     threading.Thread(target=game_loop, daemon=True).start()
-    # Port 7860 is required for Hugging Face Spaces
     app.run(host='0.0.0.0', port=7860, debug=False, threaded=True)
+
