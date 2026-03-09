@@ -5,7 +5,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const gameImg = document.getElementById('game-stream');
     const overlay = document.getElementById('overlay');
     const overlayTitle = document.getElementById('overlay-title');
-    const lbList = document.getElementById('leaderboard-list');
 
     const scoreH = document.getElementById('score-h');
     const scoreA = document.getElementById('score-a');
@@ -21,67 +20,62 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('player-name-display').innerText = name;
             document.getElementById('label-human').innerText = name;
             nameScreen.classList.add('hidden');
-            sendAction('set_name', { name });
-            updateLeaderboard();
+            pollSync();
         }
     });
 
     window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); triggerFlap(); } });
     window.addEventListener('touchstart', (e) => { if (e.target.id === 'game-stream') { e.preventDefault(); triggerFlap(); } }, { passive: false });
 
-    async function sendAction(type, extra = {}) {
-        try {
-            const res = await fetch('/sync', {
+    function triggerFlap() {
+        if (nameScreen.classList.contains('hidden')) {
+            fetch('/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type, ...extra })
+                body: JSON.stringify({ type: 'flap' })
             });
-            handleSync(await res.json());
-        } catch (e) { }
-    }
-
-    let lastFlap = 0;
-    function triggerFlap() {
-        const now = Date.now();
-        if (!nameScreen.classList.contains('hidden') || now - lastFlap < 40) return;
-        lastFlap = now;
-        sendAction('flap');
-    }
-
-    function handleSync(data) {
-        if (data.image) gameImg.src = 'data:image/jpeg;base64,' + data.image;
-        scoreH.innerText = data.score_h;
-        scoreA.innerText = data.score_a;
-        bestH.innerText = data.best_h;
-        best_A.innerText = data.best_a;
-
-        // NEW: Overlay logic
-        if (!data.running || data.done_h) {
-            overlay.classList.remove('hidden');
-            overlayTitle.innerText = data.done_h && data.score_h > 0 ? "YOU CRASHED!" : "READY?";
-            document.getElementById('overlay-msg').innerText = "PRESS SPACE TO RESTART ARENA";
-        } else {
-            overlay.classList.add('hidden');
         }
     }
 
-    async function updateLeaderboard() {
-        if (!tabVisible) return;
+    // Adaptive Sync Loop (Replaces setInterval for zero-lag)
+    async function pollSync() {
+        if (!tabVisible) {
+            setTimeout(pollSync, 500);
+            return;
+        }
+
         try {
-            const res = await fetch('/leaderboard');
-            const data = await res.json();
-            lbList.innerHTML = data.board.map((e, i) => `<div class='lb-row'><span>${i + 1}. ${e.name}</span><span>${e.score}</span></div>`).join('');
-        } catch (e) { }
+            const startTime = Date.now();
+            const res = await fetch('/sync.jpg?t=' + startTime);
+
+            // 1. Update Image (Binary Blob)
+            const blob = await res.blob();
+            const oldUrl = gameImg.src;
+            gameImg.src = URL.createObjectURL(blob);
+            if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+
+            // 2. Update Stats (From Headers)
+            scoreH.innerText = res.headers.get('X-Score-H');
+            scoreA.innerText = res.headers.get('X-Score-A');
+            bestH.innerText = res.headers.get('X-Best-H');
+            best_A.innerText = res.headers.get('X-Best-A');
+
+            const isRunning = res.headers.get('X-Running') === '1';
+            const doneH = res.headers.get('X-Done-H') === '1';
+
+            if (!isRunning || doneH) {
+                overlay.classList.remove('hidden');
+                overlayTitle.innerText = doneH && scoreH.innerText !== "0" ? "YOU CRASHED!" : "READY?";
+            } else {
+                overlay.classList.add('hidden');
+            }
+
+            // 3. Adaptive Timing (Aim for ~15-20 FPS on web)
+            const elapsed = Date.now() - startTime;
+            const wait = Math.max(5, 50 - elapsed);
+            setTimeout(pollSync, wait);
+        } catch (e) {
+            setTimeout(pollSync, 200);
+        }
     }
-
-    // High speed sync (12 FPS) - Optimized for butter-smooth visuals
-    setInterval(async () => {
-        if (!tabVisible || nameScreen.classList.contains('hidden') === false) return;
-        try {
-            const res = await fetch('/sync');
-            handleSync(await res.json());
-        } catch (e) { }
-    }, 80) // 80ms = ~12.5 FPS. Optimal balance for stability vs lag.
-
-    setInterval(updateLeaderboard, 30000);
 });
