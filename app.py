@@ -186,32 +186,35 @@ def game_loop():
                             game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
                             if len(game.history) > 5: game.history.pop(0)
                         game.is_running = False
+                        
+                        # Fix: reset birds immediately so they are back at the top on the Ready screen
+                        game.obs_h, _ = game.env_human.reset()
+                        game.obs_a, _ = game.env_ai.reset()
 
-            # 4. Rendering (NO LOCK) - Every 33ms (~30 FPS)
-            if time.time() - last_frame_time > 0.033:
-                f_h = game.env_human.render()
-                f_a = game.env_ai.render()
-                if f_h is not None and f_a is not None:
-                    # Stitch, resize, compress
-                    combined = np.hstack((f_h, f_a))
-                    h, w, _ = combined.shape
-                    small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
-                    sh, sw, _ = small.shape
-                    cv2.line(small, (sw // 2, 0), (sw // 2, sh), (160, 160, 160), 1)
-                    
-                    bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
-                    ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 35]) # Lowered for performance
-                    if ret:
-                        game.latest_frame = buffer.tobytes()
-                    last_frame_time = time.time()
+            # 4. Rendering (NO LOCK) - High Quality Sync with Loop
+            f_h = game.env_human.render()
+            f_a = game.env_ai.render()
+            if f_h is not None and f_a is not None:
+                # Merge full resolution
+                combined = np.hstack((f_h, f_a))
+                
+                # Draw the divider
+                h, w, _ = combined.shape
+                cv2.line(combined, (w // 2, 0), (w // 2, h), (180, 180, 180), 2)
+                
+                bgr = cv2.cvtColor(combined, cv2.COLOR_RGB2BGR)
+                # Restored 90 quality as requested
+                ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+                if ret:
+                    game.latest_frame = buffer.tobytes()
 
         except Exception as e:
             logger.error(f"FATAL GAME LOOP ERROR: {e}")
-            time.sleep(1) # Breath on crash
+            time.sleep(1) 
             
-        # Target ~40hz loop logic speed
+        # Target ~50hz loop for ultra fluidity
         elapsed = time.time() - loop_start
-        sleep_time = max(0.005, 0.025 - elapsed)
+        sleep_time = max(0.002, 0.02 - elapsed)
         time.sleep(sleep_time)
 
 @app.route('/')
@@ -224,7 +227,7 @@ def gen_frames():
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        time.sleep(1/24) # Stable stream speed
+        time.sleep(0.03) # Match loop speed roughly
 
 @app.route('/video_feed')
 def video_feed():
@@ -244,6 +247,7 @@ def action():
             else:
                 # Fresh Start
                 logger.info(f"Starting new round for player: {game.player_name}")
+                # birds are already reset by the end of round logic, but let's be sure
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
                 game.score_h = game.score_a = 0
@@ -269,28 +273,24 @@ def get_leaderboard():
 
 @app.route('/stats')
 def stats():
-    # Shallow copy for JSON to avoid lock issues
-    try:
-        return jsonify({
-            "score_h": game.score_h,
-            "score_a": game.score_a,
-            "best_h": game.best_h,
-            "best_a": game.best_a,
-            "attempts": game.human_attempts,
-            "round": game.total_ai_runs,
-            "history": game.history,
-            "done_h": game.done_h,
-            "done_a": game.done_a,
-            "is_running": game.is_running,
-            "player_name": game.player_name
-        })
-    except:
-        return jsonify(error="Busy")
+    return jsonify({
+        "score_h": game.score_h,
+        "score_a": game.score_a,
+        "best_h": game.best_h,
+        "best_a": game.best_a,
+        "attempts": game.human_attempts,
+        "round": game.total_ai_runs,
+        "history": game.history,
+        "done_h": game.done_h,
+        "done_a": game.done_a,
+        "is_running": game.is_running,
+        "player_name": game.player_name
+    })
 
 if __name__ == '__main__':
-    # Initialize game thread safely
     threading.Thread(target=game_loop, daemon=True).start()
     logger.info("Starting Flask server on port 7860")
     app.run(host='0.0.0.0', port=7860, debug=False, threaded=True)
+
 
 
