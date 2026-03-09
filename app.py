@@ -104,67 +104,115 @@ class GameState:
 
 game = GameState()
 
+import logging
+
+# Setup basic logging to help user debug on HF Settings -> Logs
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def load_model():
+    model_path = "flappy_ppo_final.zip"
+    if os.path.exists(model_path):
+        logger.info(f"Loading PPO model from {model_path}")
+        return PPO.load(model_path)
+    
+    # Fallback search
+    logger.warning("Main model not found, searching for fallbacks...")
+    if os.path.exists(os.path.join("legacy_models", "flappy_dqn_v2_final.zip")):
+        logger.info("Loading legacy DQN model")
+        return DQN.load(os.path.join("legacy_models", "flappy_dqn_v2_final.zip"))
+    
+    logger.error("NO MODEL FOUND! Game will run in random mode.")
+    return None
+
 def game_loop():
     global game
+    logger.info("Game loop thread started.")
+    
+    last_frame_time = 0
     while True:
-        # --- 1. AI & ENV LOGIC (NO LOCK) ---
-        ai_action = None
-        human_action = 0
+        loop_start = time.time()
         
-        if game.is_running:
-            if not game.done_a:
-                ai_action, _ = game.model.predict(game.obs_a, deterministic=True)
-            if game.flap_human:
-                human_action = 1
-                game.flap_human = False
-        
-        if game.is_running:
-            # Step AI
-            if not game.done_a:
-                game.obs_a, _, term_a, trunc_a, info_a = game.env_ai.step(ai_action)
+        try:
+            # 1. Action Preparation (Minimal Lock)
+            ai_action = None
+            h_action = 0
+            
+            with game.lock:
+                running = game.is_running
+                done_a = game.done_a
+                done_h = game.done_h
+                if game.flap_human:
+                    h_action = 1
+                    game.flap_human = False
+            
+            # 2. Heavy Computations (NO LOCK)
+            if running:
+                # AI move
+                if not done_a and game.model:
+                    try:
+                        ai_action, _ = game.model.predict(game.obs_a, deterministic=True)
+                    except Exception as e:
+                        logger.error(f"AI Predict Error: {e}")
+                        ai_action = 0
+                else:
+                    ai_action = 0
+                
+                # Step Envs
+                if not done_a:
+                    game.obs_a, _, term_a, trunc_a, info_a = game.env_ai.step(ai_action)
+                if not done_h:
+                    if h_action == 0 and game.reset_h: # Handle reset if needed
+                        game.obs_h, _ = game.env_human.reset()
+                        game.reset_h = False
+                    game.obs_h, _, term_h, trunc_h, info_h = game.env_human.step(h_action)
+                
+                # 3. Update Shared State (Minimal Lock)
                 with game.lock:
-                    game.score_a = info_a.get("score", 0)
-                    game.done_a = term_a or trunc_a
-                    if game.score_a > game.best_a: game.best_a = game.score_a
+                    if not done_a:
+                        game.score_a = info_a.get("score", 0)
+                        game.done_a = term_a or trunc_a
+                        if game.score_a > game.best_a: game.best_a = game.score_a
+                    
+                    if not done_h:
+                        game.score_h = info_h.get("score", 0)
+                        game.done_h = term_h or trunc_h
+                        if game.score_h > game.best_h: game.best_h = game.score_h
+                        if game.score_h > game.human_best_this_round: game.human_best_this_round = game.score_h
+                    
+                    # Stop round once both or AI dies (Tournament Style)
                     if game.done_a:
-                        game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
-                        if len(game.history) > 5: game.history.pop(0)
+                        if running:
+                            game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
+                            if len(game.history) > 5: game.history.pop(0)
                         game.is_running = False
 
-            # Step Human
-            if not game.done_h:
-                if game.reset_h:
-                    game.obs_h, _ = game.env_human.reset()
-                    game.score_h = 0
-                    game.done_h = False
-                    game.human_attempts += 1
-                    game.reset_h = False
-                
-                game.obs_h, _, term_h, trunc_h, info_h = game.env_human.step(human_action)
-                with game.lock:
-                    game.score_h = info_h.get("score", 0)
-                    game.done_h = term_h or trunc_h
-                    if game.score_h > game.human_best_this_round: game.human_best_this_round = game.score_h
-                    if game.score_h > game.best_h: game.best_h = game.score_h
+            # 4. Rendering (NO LOCK) - Every 33ms (~30 FPS)
+            if time.time() - last_frame_time > 0.033:
+                f_h = game.env_human.render()
+                f_a = game.env_ai.render()
+                if f_h is not None and f_a is not None:
+                    # Stitch, resize, compress
+                    combined = np.hstack((f_h, f_a))
+                    h, w, _ = combined.shape
+                    small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
+                    sh, sw, _ = small.shape
+                    cv2.line(small, (sw // 2, 0), (sw // 2, sh), (160, 160, 160), 1)
+                    
+                    bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
+                    ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 35]) # Lowered for performance
+                    if ret:
+                        game.latest_frame = buffer.tobytes()
+                    last_frame_time = time.time()
 
-        # --- 2. RENDERING (NO LOCK) ---
-        try:
-            frame_h = game.env_human.render()
-            frame_a = game.env_ai.render()
-            if frame_h is not None and frame_a is not None:
-                combined = np.hstack((frame_h, frame_a))
-                h, w, _ = combined.shape
-                small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
-                sh, sw, _ = small.shape
-                cv2.line(small, (sw // 2, 0), (sw // 2, sh), (180, 180, 180), 1)
-                bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
-                ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 40])
-                if ret:
-                    game.latest_frame = buffer.tobytes()
-        except:
-            pass
-
-        time.sleep(1/30)
+        except Exception as e:
+            logger.error(f"FATAL GAME LOOP ERROR: {e}")
+            time.sleep(1) # Breath on crash
+            
+        # Target ~40hz loop logic speed
+        elapsed = time.time() - loop_start
+        sleep_time = max(0.005, 0.025 - elapsed)
+        time.sleep(sleep_time)
 
 @app.route('/')
 def index():
@@ -176,7 +224,7 @@ def gen_frames():
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        time.sleep(1/25)
+        time.sleep(1/24) # Stable stream speed
 
 @app.route('/video_feed')
 def video_feed():
@@ -187,12 +235,15 @@ def action():
     global game
     data = request.json
     atype = data.get('type')
+    
     if atype == 'flap':
-        if game.is_running:
-            if not game.done_h: game.flap_human = True
-            else: game.reset_h = True
-        else:
-            with game.lock:
+        with game.lock:
+            if game.is_running:
+                if not game.done_h: game.flap_human = True
+                else: game.reset_h = True
+            else:
+                # Fresh Start
+                logger.info(f"Starting new round for player: {game.player_name}")
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
                 game.score_h = game.score_a = 0
@@ -203,6 +254,7 @@ def action():
                 game.is_running = True
     elif atype == 'set_name':
         game.player_name = data.get('name', 'Guest')
+        logger.info(f"Name set: {game.player_name}")
     return jsonify(success=True)
 
 @app.route('/submit_score', methods=['POST'])
@@ -217,21 +269,28 @@ def get_leaderboard():
 
 @app.route('/stats')
 def stats():
-    return jsonify({
-        "score_h": game.score_h,
-        "score_a": game.score_a,
-        "best_h": game.best_h,
-        "best_a": game.best_a,
-        "attempts": game.human_attempts,
-        "round": game.total_ai_runs,
-        "history": game.history,
-        "done_h": game.done_h,
-        "done_a": game.done_a,
-        "is_running": game.is_running,
-        "player_name": game.player_name
-    })
+    # Shallow copy for JSON to avoid lock issues
+    try:
+        return jsonify({
+            "score_h": game.score_h,
+            "score_a": game.score_a,
+            "best_h": game.best_h,
+            "best_a": game.best_a,
+            "attempts": game.human_attempts,
+            "round": game.total_ai_runs,
+            "history": game.history,
+            "done_h": game.done_h,
+            "done_a": game.done_a,
+            "is_running": game.is_running,
+            "player_name": game.player_name
+        })
+    except:
+        return jsonify(error="Busy")
 
 if __name__ == '__main__':
+    # Initialize game thread safely
     threading.Thread(target=game_loop, daemon=True).start()
+    logger.info("Starting Flask server on port 7860")
     app.run(host='0.0.0.0', port=7860, debug=False, threaded=True)
+
 
