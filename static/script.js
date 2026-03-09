@@ -16,17 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const overlayTitle = document.getElementById('overlay-title');
     const overlayMsg = document.getElementById('overlay-msg');
 
-    let playerName = "Guest";
-    let humanScoreSubmitted = false;
-    let aiScoreSubmitted = false;
-
-    // Visibility management to prevent 429 when tab is in background
+    let playerName = "PILOT";
     let tabVisible = true;
+
     document.addEventListener('visibilitychange', () => {
         tabVisible = !document.hidden;
-        if (tabVisible) {
-            refreshFrame(); // Resume frame polling
-        }
     });
 
     // Handle Name Input
@@ -45,14 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Theme Toggle Logic
-    let isDark = true;
-    themeBtn.addEventListener('click', () => {
-        isDark = !isDark;
-        document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
-        themeBtn.innerText = isDark ? '🌙' : '☀️';
-    });
-
     // Handle Keyboard Input
     window.addEventListener('keydown', (e) => {
         if (e.code === 'Space') {
@@ -61,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Handle Mobile Touch Input
+    // Handle Mobile Touch
     window.addEventListener('touchstart', (e) => {
         if (e.target.id === 'game-stream' || e.target.closest('.video-container')) {
             e.preventDefault();
@@ -69,12 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, { passive: false });
 
-    // Flag for debounce
-    let lastFlapTime = 0;
+    let lastFlap = 0;
     function triggerFlap() {
         const now = Date.now();
-        if (nameScreen.classList.contains('hidden') && now - lastFlapTime > 50) {
-            lastFlapTime = now;
+        if (nameScreen.classList.contains('hidden') && now - lastFlap > 30) {
+            lastFlap = now;
             fetch('/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -88,20 +73,16 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await fetch('/leaderboard');
             const data = await res.json();
-            let lbHtml = '';
-            data.board.forEach((entry, i) => {
-                lbHtml += `
-                    <div class="lb-row">
-                        <span class="lb-name">${i + 1}. ${entry.name}</span>
-                        <span class="lb-score">${entry.score}</span>
-                    </div>
-                `;
-            });
-            lbList.innerHTML = lbHtml || '<p style="color: grey; font-size: 0.8rem;">No scores yet</p>';
+            lbList.innerHTML = data.board.map((e, i) => `
+                <div class="lb-row">
+                    <span class="lb-name">${i + 1}. ${e.name}</span>
+                    <span class="lb-score">${e.score}</span>
+                </div>
+            `).join('') || '<p>No scores yet</p>';
         } catch (e) { }
     }
 
-    // Main Update Loop - Slowed to 1500ms to avoid HF 429 rate limit
+    // Stats Loop - 600ms for balance
     setInterval(async () => {
         if (!tabVisible) return;
         try {
@@ -113,64 +94,25 @@ document.addEventListener('DOMContentLoaded', () => {
             bestH.innerText = data.best_h;
             bestA.innerText = data.best_a;
 
-            // Overlay Management
-            if (!data.is_running) {
+            if (!data.is_running && data.done) {
                 overlay.classList.remove('hidden');
-                overlayTitle.innerText = "READY?";
-                overlayMsg.innerText = "PRESS SPACE TO BATTLE";
+                overlayTitle.innerText = data.score_h > 0 || data.score_a > 0 ? "GAME OVER" : "READY?";
+                overlayMsg.innerText = "PRESS SPACE TO START DUEL";
             } else {
-                if (data.done_h) {
-                    overlay.classList.remove('hidden');
-                    overlayTitle.innerText = "YOU CRASHED!";
-                    overlayMsg.innerText = "PRESS SPACE TO TRY AGAIN";
-                } else {
-                    overlay.classList.add('hidden');
-                }
-            }
-
-            // Realtime Score Submission
-            if (data.done_h && data.score_h > 0 && !humanScoreSubmitted) {
-                fetch('/submit_score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: playerName, score: data.score_h })
-                }).then(() => updateLeaderboard());
-                humanScoreSubmitted = true;
-            }
-
-            if (data.is_running && !data.done_h) {
-                humanScoreSubmitted = false;
-                aiScoreSubmitted = false;
-            }
-
-            if (data.done_a && data.score_a > 0 && !aiScoreSubmitted) {
-                fetch('/submit_score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: "AI", score: data.score_a })
-                });
-                aiScoreSubmitted = true;
+                overlay.classList.add('hidden');
             }
         } catch (e) { }
-    }, 1500);
+    }, 600);
 
-    // Leaderboard Polling - Slowed to 45s for HF Stability
-    setInterval(updateLeaderboard, 45000);
-    updateLeaderboard();
+    setInterval(updateLeaderboard, 30000);
 
-    // === FRAME POLLING ===
-    // ~5 FPS (200ms) to avoid HF 429 when multiple users watch.
+    // Frame Polling - 5 FPS
     const gameStream = document.getElementById('game-stream');
     function refreshFrame() {
         if (!tabVisible) return;
-        // Cache-bust so browser doesn't serve a stale image
         gameStream.src = '/frame?t=' + Date.now();
     }
-    gameStream.onload = function () {
-        setTimeout(refreshFrame, 200);
-    };
-    gameStream.onerror = function () {
-        setTimeout(refreshFrame, 1000); // Wait longer on errors
-    };
+    gameStream.onload = () => setTimeout(refreshFrame, 200);
+    gameStream.onerror = () => setTimeout(refreshFrame, 1000);
     refreshFrame();
 });
