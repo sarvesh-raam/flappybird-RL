@@ -20,7 +20,7 @@ COPY requirements.txt .
 
 # Install dependencies one-by-one to avoid memory crashes on small servers
 RUN pip install --no-cache-dir numpy gymnasium pygame
-RUN pip install --no-cache-dir opencv-python gunicorn
+RUN pip install --no-cache-dir opencv-python gunicorn flask flask-cors
 RUN pip install --no-cache-dir stable-baselines3[extra] flappy-bird-gymnasium
 
 # Copy the rest of the application code
