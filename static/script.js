@@ -20,6 +20,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let humanScoreSubmitted = false;
     let aiScoreSubmitted = false;
 
+    // Visibility management to prevent 429 when tab is in background
+    let tabVisible = true;
+    document.addEventListener('visibilitychange', () => {
+        tabVisible = !document.hidden;
+        if (tabVisible) {
+            refreshFrame(); // Resume frame polling
+        }
+    });
+
     // Handle Name Input
     startBtn.addEventListener('click', () => {
         if (nameInput.value.trim()) {
@@ -54,7 +63,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle Mobile Touch Input
     window.addEventListener('touchstart', (e) => {
-        // Prevent default only if on game area to allow scrolling elsewhere
         if (e.target.id === 'game-stream' || e.target.closest('.video-container')) {
             e.preventDefault();
             triggerFlap();
@@ -76,6 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function updateLeaderboard() {
+        if (!tabVisible) return;
         try {
             const res = await fetch('/leaderboard');
             const data = await res.json();
@@ -92,8 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { }
     }
 
-    // Main Update Loop - 300ms for real-time scores without triggering 429
+    // Main Update Loop - Slowed to 1500ms to avoid HF 429 rate limit
     setInterval(async () => {
+        if (!tabVisible) return;
         try {
             const res = await fetch('/stats');
             const data = await res.json();
@@ -142,27 +152,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 aiScoreSubmitted = true;
             }
         } catch (e) { }
-    }, 300);
+    }, 1500);
 
-    // Leaderboard Polling - Slowed to 15s
-    setInterval(updateLeaderboard, 15000);
+    // Leaderboard Polling - Slowed to 45s for HF Stability
+    setInterval(updateLeaderboard, 45000);
     updateLeaderboard();
 
-    // === FRAME POLLING (replaces MJPEG stream) ===
-    // Polls /frame at ~15fps instead of one long-lived MJPEG connection.
-    // This avoids Hugging Face's 429 rate-limiting on streaming connections.
+    // === FRAME POLLING ===
+    // ~5 FPS (200ms) to avoid HF 429 when multiple users watch.
     const gameStream = document.getElementById('game-stream');
     function refreshFrame() {
+        if (!tabVisible) return;
         // Cache-bust so browser doesn't serve a stale image
         gameStream.src = '/frame?t=' + Date.now();
     }
-    // Start polling once the first image loads to avoid broken frames
     gameStream.onload = function () {
-        setTimeout(refreshFrame, 67); // ~15 FPS
+        setTimeout(refreshFrame, 200);
     };
     gameStream.onerror = function () {
-        setTimeout(refreshFrame, 200); // Slow retry on error
+        setTimeout(refreshFrame, 1000); // Wait longer on errors
     };
-    refreshFrame(); // Initial load
+    refreshFrame();
 });
-
