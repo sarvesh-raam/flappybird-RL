@@ -14,16 +14,40 @@ document.addEventListener('DOMContentLoaded', () => {
         displayH: document.getElementById('player-name-display')
     };
 
-    // Game Config (Matching Gymnasium internals)
+    // --- ASSETS ---
+    const atlas = new Image();
+    atlas.src = '/static/atlas.png';
+    let assetsLoaded = false;
+    atlas.onload = () => { assetsLoaded = true; };
+
+    const SPRITES = {
+        bg_day: [0, 0, 288, 512],
+        bg_night: [288, 0, 288, 512],
+        ground: [584, 0, 336, 112],
+        pipe_green_top: [112, 646, 52, 320],
+        pipe_green_bot: [168, 646, 52, 320],
+        bird_yellow: [
+            [3, 491, 34, 24], [31, 491, 34, 24], [59, 491, 34, 24]
+        ],
+        bird_green: [
+            [3, 529, 34, 24], [31, 529, 34, 24], [59, 529, 34, 24]
+        ]
+    };
+
     const W = 288;
     const H = 512;
     canvas.width = W * 2;
     canvas.height = H;
 
-    let gameState = null;
+    let serverState = null;
+    let clientState = {
+        h: { y: 256, rot: 0, frame: 0 },
+        a: { y: 256, rot: 0, frame: 0 },
+        scroll: 0
+    };
+
     let tabVisible = true;
     let pendingAction = null;
-
     document.addEventListener('visibilitychange', () => { tabVisible = !document.hidden; });
 
     startBtn.addEventListener('click', () => {
@@ -31,118 +55,112 @@ document.addEventListener('DOMContentLoaded', () => {
         ui.labelH.innerText = name.toUpperCase();
         ui.displayH.innerText = name.toUpperCase();
         nameScreen.classList.add('hidden');
-        fetch('/sync?act=set_name&name=' + name);
         requestAnimationFrame(renderLoop);
         syncLoop();
     });
 
-    // --- CONTROLS ---
-    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); pendingAction = 'flap'; } });
-    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); pendingAction = 'flap'; }, { passive: false });
-
-    // --- NETWORK SYNC ---
+    // --- SYNC ---
     async function syncLoop() {
         if (!tabVisible) { setTimeout(syncLoop, 1000); return; }
         try {
             let url = '/sync?t=' + Date.now();
             if (pendingAction) { url += '&act=' + pendingAction; pendingAction = null; }
             const res = await fetch(url);
-            gameState = await res.json();
+            serverState = await res.json();
 
-            // Update UI
-            ui.scoreH.innerText = gameState.score_h;
-            ui.scoreA.innerText = gameState.score_a;
-            ui.bestH.innerText = gameState.best_h;
-            ui.bestA.innerText = gameState.best_a;
+            // Stats
+            ui.scoreH.innerText = serverState.score_h;
+            ui.scoreA.innerText = serverState.score_a;
+            ui.bestH.innerText = serverState.best_h;
+            ui.bestA.innerText = serverState.best_a;
 
-            if (!gameState.running || gameState.done_h) {
+            if (!serverState.running || serverState.done_h) {
                 overlay.classList.remove('hidden');
-                document.getElementById('overlay-title').innerText = gameState.done_h && gameState.score_h > 0 ? "YOU CRASHED!" : "READY?";
+                document.getElementById('overlay-title').innerText = serverState.done_h && serverState.score_h > 0 ? "YOU CRASHED!" : "READY?";
             } else {
                 overlay.classList.add('hidden');
             }
         } catch (e) { }
-        setTimeout(syncLoop, 50); // 20Hz Sync is plenty when client renders
+        setTimeout(syncLoop, 50);
     }
 
-    // --- CANVAS RENDERER (60 FPS) ---
-    function drawBird(x, y, rot, color) {
+    // --- PRO RENDERER ---
+    function drawSprite(key, x, y, options = {}) {
+        const s = SPRITES[key];
+        if (!s) return;
+
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(rot * Math.PI / 180);
-        // Bird Body
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 16, 12, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        // Eye
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(8, -4, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(10, -4, 2, 0, Math.PI * 2);
-        ctx.fill();
-        // Wing
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.beginPath();
-        ctx.ellipse(-6, 2, 8, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (options.rot) ctx.rotate(options.rot * Math.PI / 180);
+
+        // Scale/Flip support
+        const w = options.w || s[2];
+        const h = options.h || s[3];
+
+        ctx.drawImage(atlas, s[0], s[1], s[2], s[3], -w / 2, -h / 2, w, h);
         ctx.restore();
     }
 
-    function drawPipes(pipes, offsetX) {
-        const PIPE_W = 52;
-        const GAP = 100;
-        ctx.fillStyle = '#73bf2e'; // Pipe Green
-        ctx.strokeStyle = '#2d4c0d';
-        ctx.lineWidth = 3;
-
-        pipes.forEach(p => {
-            const x = p.x + offsetX;
-            const topY = p.y;
-            // Top Pipe
-            ctx.fillRect(x, 0, PIPE_W, topY);
-            ctx.strokeRect(x, 0, PIPE_W, topY);
-            // Bottom Pipe
-            const botY = topY + GAP;
-            ctx.fillRect(x, botY, PIPE_W, H - botY);
-            ctx.strokeRect(x, botY, PIPE_W, H - botY);
-            // Pipe Caps
-            ctx.fillStyle = '#8ce03b';
-            ctx.fillRect(x - 2, topY - 20, PIPE_W + 4, 20);
-            ctx.strokeRect(x - 2, topY - 20, PIPE_W + 4, 20);
-            ctx.fillRect(x - 2, botY, PIPE_W + 4, 20);
-            ctx.strokeRect(x - 2, botY, PIPE_W + 4, 20);
-            ctx.fillStyle = '#73bf2e';
-        });
-    }
-
     function renderLoop() {
-        if (!gameState) { requestAnimationFrame(renderLoop); return; }
+        if (!serverState || !assetsLoaded) { requestAnimationFrame(renderLoop); return; }
 
-        // 1. Clear Arena
-        ctx.fillStyle = '#4ec0ca';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // 1. Update Client Physics (Smoothing)
+        // Lerp towards server position
+        clientState.h.y += (serverState.h.y - clientState.h.y) * 0.4;
+        clientState.a.y += (serverState.a.y - clientState.a.y) * 0.4;
 
-        // 2. Draw Human Arena (Left)
-        drawPipes(gameState.h.pipes, 0);
-        drawBird(50, gameState.h.y, gameState.h.rot || 0, '#f7dc6f');
+        // Rotation & Animation
+        if (serverState.running) {
+            clientState.scroll = (clientState.scroll + 2.5) % 288;
+            clientState.h.frame = Math.floor(Date.now() / 100) % 3;
+            clientState.a.frame = Math.floor(Date.now() / 100) % 3;
 
-        // 3. Draw AI Arena (Right)
-        drawPipes(gameState.a.pipes, W);
-        drawBird(W + 50, gameState.a.y, gameState.a.rot || 0, '#58d68d');
+            // Calculate rotation based on velocity (delta Y)
+            clientState.h.rot = Math.min(Math.max((serverState.h.y - clientState.h.y) * 3, -20), 90);
+            clientState.a.rot = Math.min(Math.max((serverState.a.y - clientState.a.y) * 3, -20), 90);
+        } else {
+            clientState.h.rot = 0; clientState.a.rot = 0;
+        }
 
-        // 4. Draw Ground
-        ctx.fillStyle = '#ded895';
-        ctx.fillRect(0, H - 50, canvas.width, 50);
-        ctx.fillStyle = '#73bf2e';
-        ctx.fillRect(0, H - 55, canvas.width, 5);
+        // --- DRAWING ---
+        // Arena 1
+        drawSprite('bg_day', 144, 256);
+        serverState.h.pipes.forEach(p => {
+            // Top Pipe
+            ctx.drawImage(atlas, 112, 646, 52, 320, p.x, p.y - 320, 52, 320);
+            // Bottom Pipe (gap is ~100)
+            ctx.drawImage(atlas, 168, 646, 52, 320, p.x, p.y + 100, 52, 320);
+        });
+        const hb = SPRITES.bird_yellow[clientState.h.frame];
+        ctx.save();
+        ctx.translate(50, clientState.h.y);
+        ctx.rotate(clientState.h.rot * Math.PI / 180);
+        ctx.drawImage(atlas, hb[0], hb[1], hb[2], hb[3], -17, -12, 34, 24);
+        ctx.restore();
+
+        // Arena 2
+        ctx.save(); ctx.translate(W, 0);
+        drawSprite('bg_night', 144, 256);
+        serverState.a.pipes.forEach(p => {
+            ctx.drawImage(atlas, 112, 646, 52, 320, p.x, p.y - 320, 52, 320);
+            ctx.drawImage(atlas, 168, 646, 52, 320, p.x, p.y + 100, 52, 320);
+        });
+        const ab = SPRITES.bird_green[clientState.a.frame];
+        ctx.save();
+        ctx.translate(50, clientState.a.y);
+        ctx.rotate(clientState.a.rot * Math.PI / 180);
+        ctx.drawImage(atlas, ab[0], ab[1], ab[2], ab[3], -17, -12, 34, 24);
+        ctx.restore();
+        ctx.restore();
+
+        // Shared Ground
+        ctx.drawImage(atlas, 584, 0, 336, 112, -clientState.scroll, H - 112, 336, 112);
+        ctx.drawImage(atlas, 584, 0, 336, 112, 336 - clientState.scroll, H - 112, 336, 112);
+        ctx.drawImage(atlas, 584, 0, 336, 112, 672 - clientState.scroll, H - 112, 336, 112);
 
         requestAnimationFrame(renderLoop);
     }
+
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); pendingAction = 'flap'; } });
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); pendingAction = 'flap'; }, { passive: false });
 });
