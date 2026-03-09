@@ -1,0 +1,37 @@
+name: Sync to Hugging Face
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Sync with Preservation
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          # 1. Setup HF Remote and Clone existing state
+          git config --global user.email "sync-bot@example.com"
+          git config --global user.name "Sync Bot"
+          
+          # Clone into a separate folder to preserve what's already on HF (like models)
+          git clone https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl hf_space
+          
+          # 2. Copy current code into the HF folder
+          # We only copy the code and assets, leaving .zip and other large files alone!
+          cp -rv app.py requirements.txt Dockerfile LICENSE README.md hf_space/
+          cp -rv templates/ hf_space/ 2>/dev/null || true
+          cp -rv static/ hf_space/ 2>/dev/null || true
+          
+          # 3. Commit and Push from within the HF folder
+          cd hf_space
+          git add .
+          # Only commit if something changed
+          git diff-index --quiet HEAD || (git commit -m "Update code via Sync Bot" && git push origin main)
+

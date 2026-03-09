@@ -55,19 +55,29 @@ def load_model():
     model_type = "PPO"
     if os.path.exists("flappy_ppo_final.zip"):
         model_path = "flappy_ppo_final.zip"
+        logger.info(f"FOUND AI MODEL: {model_path}")
     elif os.path.exists("models_ppo"):
         import glob
         checkpoints = glob.glob("models_ppo/*.zip")
         if checkpoints:
             model_path = max(checkpoints, key=os.path.getmtime)
+            logger.info(f"FOUND CHECKPOINT: {model_path}")
     
     if not model_path and os.path.exists(os.path.join("legacy_models", "flappy_dqn_v2_final.zip")):
         model_path = os.path.join("legacy_models", "flappy_dqn_v2_final.zip")
         model_type = "DQN"
+        logger.info(f"FALLING BACK TO LEGACY: {model_path}")
     
     if model_path:
-        return PPO.load(model_path) if model_type == "PPO" else DQN.load(model_path)
+        try:
+            return PPO.load(model_path) if model_type == "PPO" else DQN.load(model_path)
+        except Exception as e:
+            logger.error(f"MODEL LOAD FAILED: {e}")
+            return None
+    
+    logger.warning("CRITICAL: NO AI MODEL FOUND! AI bird will not flap.")
     return None
+
 
 class GameState:
     def __init__(self):

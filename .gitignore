@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Project specific
+logs/
+models/
+models_v2/
+models_ppo/
+*.mp4
+
+# Allow final trained models
+!flappy_ppo_final.zip
+!legacy_models/*.zip
+requirements.txt.resolved
