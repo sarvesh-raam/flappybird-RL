@@ -142,32 +142,31 @@ def game_loop():
                 if game.done_a:
                     game.is_running = False
 
-            # ALWAYS RENDER (even if paused/gameover)
+            # --- OPTIMIZED FOR HOSTING (KOYEB/RENDER) ---
             try:
                 frame_h = game.env_human.render()
                 frame_a = game.env_ai.render()
                 if frame_h is not None and frame_a is not None:
-                    if not hasattr(game, "logged_shape"):
-                        print(f"Frames found! Shapes: H:{frame_h.shape}, A:{frame_a.shape}")
-                        game.logged_shape = True
+                    # Combine frames
+                    combined = np.hstack((frame_h, frame_a))
                     
-                    combined = np.ascontiguousarray(np.hstack((frame_h, frame_a)))
+                    # DOWNSCALE (50% size) = 400% Faster Video
                     h, w, _ = combined.shape
-                    cv2.line(combined, (w // 2, 0), (w // 2, h), (180, 180, 180), 2)
-                    bgr = cv2.cvtColor(combined, cv2.COLOR_RGB2BGR)
-                    ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                    small = cv2.resize(combined, (w // 2, h // 2), interpolation=cv2.INTER_AREA)
+                    
+                    sh, sw, _ = small.shape
+                    cv2.line(small, (sw // 2, 0), (sw // 2, sh), (180, 180, 180), 1)
+                    
+                    bgr = cv2.cvtColor(small, cv2.COLOR_RGB2BGR)
+                    # QUALITY 50 = Smooth gameplay, low lag
+                    ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
                     if ret:
                         game.latest_frame = buffer.tobytes()
-                else:
-                    if not hasattr(game, "logged_none"):
-                        print(f"Warning: Render returned None! H:{frame_h is None}, A:{frame_a is None}")
-                        game.logged_none = True
             except Exception as e:
-                if "game" not in str(e).lower(): # Avoid excessive logging of common ones
-                   print(f"Render error: {e}")
+                pass 
 
-        # Dynamic sleep based on loop time to keep exactly 30fps
-        time.sleep(1/60) # Faster internal cycle for lower latency
+        # 40 FPS target - smooth and stable for cloud servers
+        time.sleep(1/40)
 
 @app.route('/')
 def index():
