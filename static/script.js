@@ -11,25 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.width = W * 2;
     canvas.height = H;
 
-    // Asset Atlas
-    const atlas = new Image();
-    atlas.src = '/static/atlas.png?v=7.2';
-    let loaded = false;
-    atlas.onload = () => { loaded = true; };
-
-    // Pixel Perfect Coordinates
-    const SPRITES = {
-        bg: [0, 0, 288, 512],
-        bg_night: [288, 0, 288, 512],
-        ground: [584, 0, 336, 112],
-        pipe_top: [112, 646, 52, 320],
-        pipe_bot: [168, 646, 52, 320],
-        birds: [
-            [[3, 491, 34, 24], [31, 491, 34, 24], [59, 491, 34, 24]], // Yellow
-            [[3, 529, 34, 24], [31, 529, 34, 24], [59, 529, 34, 24]]  // Green
-        ]
-    };
-
     let s = null; // Server state
     let pendingAct = null;
     let scroll = 0;
@@ -62,54 +43,120 @@ document.addEventListener('DOMContentLoaded', () => {
                 overlay.classList.remove('hidden');
                 document.getElementById('modal-title').innerText = "GAME OVER";
                 document.getElementById('btn-start').innerText = "RETRY";
-                document.getElementById('name-zone').classList.add('hidden');
+                document.getElementById('modal-msg').innerText = "FINAL SCORE: " + s.score_h;
             }
         } catch (e) { }
         setTimeout(sync, 40);
     }
 
-    function draw() {
-        if (!loaded || !s) { requestAnimationFrame(draw); return; }
+    // --- PRO VECTOR RENDERING (Zero image dependencies) ---
+    function drawProBird(x, y, rot, color1, color2) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((rot || 0) * Math.PI / 180);
 
-        // Clear
+        // Body Shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath(); ctx.ellipse(2, 2, 17, 13, 0, 0, Math.PI * 2); ctx.fill();
+
+        // Main Body
+        ctx.fillStyle = color1;
+        ctx.beginPath(); ctx.ellipse(0, 0, 17, 13, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#543847'; ctx.lineWidth = 2.5; ctx.stroke();
+
+        // Belly
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.ellipse(-2, 4, 10, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+
+        // Eye
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(8, -5, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = 'black';
+        ctx.beginPath(); ctx.arc(10, -5, 2.5, 0, Math.PI * 2); ctx.fill();
+
+        // Beak
+        ctx.fillStyle = '#f76a02';
+        ctx.beginPath();
+        ctx.moveTo(10, 0); ctx.lineTo(24, 2); ctx.lineTo(10, 6); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        // Wing
+        const swing = Math.sin(Date.now() / 80) * 4;
+        ctx.fillStyle = color2;
+        ctx.beginPath(); ctx.ellipse(-7, 2 + swing, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function drawProPipe(x, y, isLeft) {
+        const PIPE_W = 52;
+        const GAP = 100;
+        const color = isLeft ? '#73bf2e' : '#528a1c';
+        const dark = '#2d4c0d';
+
+        ctx.fillStyle = color;
+        ctx.strokeStyle = dark;
+        ctx.lineWidth = 3;
+
+        // Top Pipe
+        ctx.fillRect(x, 0, PIPE_W, y);
+        ctx.strokeRect(x, 0, PIPE_W, y);
+        // Lip
+        ctx.fillStyle = '#8ce03b';
+        ctx.fillRect(x - 4, y - 25, PIPE_W + 8, 25);
+        ctx.strokeRect(x - 4, y - 25, PIPE_W + 8, 25);
+
+        // Bottom Pipe
+        const botY = y + GAP;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, botY, PIPE_W, H - botY);
+        ctx.strokeRect(x, botY, PIPE_W, H - botY);
+        // Lip
+        ctx.fillStyle = '#8ce03b';
+        ctx.fillRect(x - 4, botY, PIPE_W + 8, 25);
+        ctx.strokeRect(x - 4, botY, PIPE_W + 8, 25);
+    }
+
+    function draw(time) {
+        if (!s) { requestAnimationFrame(draw); return; }
+
+        // --- ARENA 1 (DAY) ---
         ctx.fillStyle = '#4ec0ca';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, W, H);
+        // Sun
+        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(220, 60, 25, 0, Math.PI * 2); ctx.fill();
+        // Pipes
+        s.h.pipes.forEach(p => drawProPipe(p.x, p.y, true));
+        // Bird
+        drawProBird(50, s.h.y, s.h.rot, '#f7dc6f', '#f1c40f');
 
-        // Backgrounds
-        ctx.drawImage(atlas, ...SPRITES.bg, 0, 0, W, H);
-        ctx.drawImage(atlas, ...SPRITES.bg_night, W, 0, W, H);
+        // --- ARENA 2 (NIGHT) ---
+        ctx.fillStyle = '#272738';
+        ctx.fillRect(W, 0, W, H);
+        // Moon
+        ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(W + 50, 60, 20, 0, Math.PI * 2); ctx.fill();
+        // Pipes
+        s.a.pipes.forEach(p => drawProPipe(p.x + W, p.y, false));
+        // Bird
+        drawProBird(W + 50, s.a.y, s.a.rot, '#58d68d', '#2ecc71');
 
-        if (s.running) scroll = (scroll + 3) % 288;
+        // --- SEPARATOR ---
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        ctx.fillRect(W - 1, 0, 2, H);
 
-        // Draw Pipes (Arena 1)
-        s.h.pipes.forEach(p => {
-            ctx.drawImage(atlas, ...SPRITES.pipe_top, p.x, p.y - 320, 52, 320);
-            ctx.drawImage(atlas, ...SPRITES.pipe_bot, p.x, p.y + 100, 52, 320);
-        });
-
-        // Draw Pipes (Arena 2)
-        s.a.pipes.forEach(p => {
-            ctx.drawImage(atlas, ...SPRITES.pipe_top, p.x + W, p.y - 320, 52, 320);
-            ctx.drawImage(atlas, ...SPRITES.pipe_bot, p.x + W, p.y + 100, 52, 320);
-        });
-
-        // Draw Birds
-        const f = Math.floor(Date.now() / 100) % 3;
-        // Human
-        ctx.save(); ctx.translate(50, s.h.y);
-        ctx.rotate((s.h.rot || 0) * Math.PI / 180);
-        ctx.drawImage(atlas, ...SPRITES.birds[0][f], -17, -12, 34, 24);
-        ctx.restore();
-        // AI
-        ctx.save(); ctx.translate(W + 50, s.a.y);
-        ctx.rotate((s.a.rot || 0) * Math.PI / 180);
-        ctx.drawImage(atlas, ...SPRITES.birds[1][f], -17, -12, 34, 24);
-        ctx.restore();
-
-        // Ground
-        ctx.drawImage(atlas, ...SPRITES.ground, -scroll, H - 112, 336, 112);
-        ctx.drawImage(atlas, ...SPRITES.ground, 336 - scroll, H - 112, 336, 112);
-        ctx.drawImage(atlas, ...SPRITES.ground, 672 - scroll, H - 112, 336, 112);
+        // --- SCROLLING GROUND ---
+        if (s.running) scroll = (scroll + 2.5) % 24;
+        ctx.fillStyle = '#ded895';
+        ctx.fillRect(0, H - 90, canvas.width, 90);
+        ctx.fillStyle = '#8ce03b';
+        ctx.fillRect(0, H - 95, canvas.width, 10);
+        // Texture marks
+        ctx.fillStyle = 'rgba(0,0,0,0.1)';
+        for (let i = -scroll; i < canvas.width; i += 24) {
+            ctx.fillRect(i, H - 95, 12, 10);
+        }
 
         requestAnimationFrame(draw);
     }
