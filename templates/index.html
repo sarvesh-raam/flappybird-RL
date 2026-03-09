@@ -3,27 +3,124 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flappy RL | Hyper-Sync Arena</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Flappybird RL | AI Arena</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        /* Precision Canvas Styling */
-        .canvas-wrapper {
-            position: relative;
-            width: 100%;
-            height: 480px;
-            background: #4ec0ca;
-            /* Classic Flappy Blue */
-            border-radius: 12px;
-            overflow: hidden;
-            display: flex;
+        :root {
+            --bg-color: #272738;
+            --accent: #f7dc6f;
         }
 
-        #game-canvas {
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            background: #4ec0ca;
+            border: 4px solid #543847;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+        }
+
+        canvas {
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            image-rendering: pixelated;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .scoreboard {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 14px;
+        }
+
+        .score-box {
+            text-align: center;
+        }
+
+        .score-val {
+            font-size: 24px;
+            margin-top: 5px;
+            color: var(--accent);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: all;
+            z-index: 10;
+        }
+
+        .modal-card {
+            background: #ded895;
+            border: 4px solid #543847;
+            padding: 30px;
+            text-align: center;
+            color: #543847;
+            border-radius: 4px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 20px 0;
+            font-family: 'Press Start 2P', cursive;
+            border: 3px solid #543847;
+            text-align: center;
+            outline: none;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #f7dc6f;
+            border: 3px solid #543847;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #543847;
+        }
+
+        button:active {
+            transform: translateY(4px);
+            box-shadow: none;
         }
 
         .v-split {
@@ -31,86 +128,72 @@
             left: 50%;
             top: 0;
             bottom: 0;
-            width: 4px;
-            background: rgba(255, 255, 255, 0.4);
+            width: 3px;
+            background: rgba(0, 0, 0, 0.2);
             z-index: 5;
-            transform: translateX(-50%);
         }
 
-        .arena-labels {
+        .labels {
             position: absolute;
-            bottom: 10px;
+            bottom: 80px;
             width: 100%;
             display: flex;
             justify-content: space-around;
+            font-size: 10px;
+            text-shadow: 1px 1px 0 #000;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .brain-badge {
+            background: #ff4757;
             color: white;
-            font-weight: 800;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-            pointer-events: none;
-            z-index: 6;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 8px;
+            margin-top: 5px;
         }
     </style>
 </head>
 
-<body data-theme="dark">
-    <div id="name-screen" class="modal-overlay">
-        <div class="modal-card glass">
-            <h2>WELCOME PILOT</h2>
-            <p>Enter your callsign to challenge the AI</p>
-            <input type="text" id="player-name-input" placeholder="YOUR NAME" maxlength="12">
-            <button id="start-btn">ENTER ARENA</button>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div class="v-split"></div>
+        <div class="ui-layer">
+            <div class="scoreboard">
+                <div class="score-box">
+                    <div id="p-name">HUMAN</div>
+                    <div id="score-h" class="score-val">0</div>
+                </div>
+                <div class="score-box">
+                    <div>AI BRAIN</div>
+                    <div id="score-a" class="score-val">0</div>
+                    <div class="brain-badge">LIVE PPO MODEL</div>
+                </div>
+            </div>
+            <div class="labels">
+                <span>YOU</span>
+                <span>AI</span>
+            </div>
+        </div>
+        <div id="overlay">
+            <div id="name-modal" class="modal-card">
+                <h2>BIRD RL</h2>
+                <p style="font-size: 10px; margin-top:10px;">HUMAN vs AI ARENA</p>
+                <input type="text" id="name-input" placeholder="NAME" maxlength="10">
+                <button id="start-btn">FLAP TO START</button>
+            </div>
+            <div id="retry-modal" class="modal-card hidden">
+                <h2 id="result-title">YOU CRASHED</h2>
+                <p id="final-score" style="margin:20px 0;">SCORE: 0</p>
+                <button id="retry-btn">RETRY</button>
+            </div>
         </div>
     </div>
 
-    <div class="container">
-        <header>
-            <h1>FLAPPY <span class="accent">RL</span> <span
-                    style="font-size: 0.6em; vertical-align: middle; background: #ff4757; padding: 2px 8px; border-radius: 4px;">v6.0
-                    HYPER-SYNC</span></h1>
-            <p class="subtitle">Real-time Human vs AI Tournament</p>
-        </header>
-
-        <main class="dashboard">
-            <div class="main-display">
-                <div class="game-console glass">
-                    <div class="canvas-wrapper">
-                        <canvas id="game-canvas"></canvas>
-                        <div class="v-split"></div>
-                        <div class="arena-labels">
-                            <span id="label-human">HUMAN</span>
-                            <span>AI BIRD</span>
-                        </div>
-                        <div id="overlay" class="overlay">
-                            <div class="overlay-card glass">
-                                <h2 id="overlay-title">READY?</h2>
-                                <p id="overlay-msg">PRESS SPACE TO BATTLE</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="side-panel">
-                <div class="stats-panel">
-                    <div class="stat-card card glass green">
-                        <h3><span id="player-name-display">YOU</span></h3>
-                        <div id="score-h" class="big-num">0</div>
-                        <p>BEST: <span id="best-h">0</span></p>
-                    </div>
-                    <div class="stat-card card glass blue">
-                        <h3>AI AGENT</h3>
-                        <div id="score-a" class="big-num">0</div>
-                        <p>BEST: <span id="best-a">0</span></p>
-                    </div>
-                </div>
-
-                <div class="leaderboard card glass">
-                    <h3>🏆 TOP PILOTS</h3>
-                    <div id="leaderboard-list"></div>
-                </div>
-            </div>
-        </main>
-    </div>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 
