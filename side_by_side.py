@@ -49,9 +49,11 @@ def main():
     model = load_model()
 
     # 4. Global Stats
-    total_runs = 0
+    total_ai_runs = 0
+    human_attempts_this_run = 0
     best_h = 0
     best_a = 0
+    history = [] # List of (Round#, HumanBestInRound, AIScore)
     
     # Game States: "START", "RUNNING", "GAMEOVER"
     state = "START"
@@ -60,18 +62,21 @@ def main():
     obs_a, _ = env_ai.reset()
     done_h = done_a = False
     score_h = score_a = 0
+    human_best_this_round = 0
 
     running = True
     while running:
         # --- EVENT HANDLING ---
         flap_human = False
+        reset_h_mid_run = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             if event.type == pygame.KEYDOWN:
                 if state == "START" and event.key == pygame.K_SPACE:
                     state = "RUNNING"
-                    total_runs += 1
+                    total_ai_runs += 1
+                    human_attempts_this_run = 1
                     # Refresh model for latest training progress
                     model = load_model()
                 elif state == "GAMEOVER" and event.key == pygame.K_r:
@@ -79,12 +84,20 @@ def main():
                     obs_a, _ = env_ai.reset()
                     done_h = done_a = False
                     score_h = score_a = 0
+                    human_best_this_round = 0
                     state = "START"
-                elif state == "RUNNING" and event.key == pygame.K_SPACE:
-                    flap_human = True
+                elif state == "RUNNING":
+                    if event.key == pygame.K_SPACE:
+                        if not done_h:
+                            flap_human = True
+                        else:
+                            reset_h_mid_run = True # Restart human only
+                    if event.key == pygame.K_s: # SKIP/FORCE END AI
+                        done_a = True
 
         # --- LOGIC ---
         if state == "RUNNING":
+            # AI LOGIC: Continuous
             if not done_a:
                 action_ai, _ = model.predict(obs_a, deterministic=True)
                 obs_a, _, term_a, trunc_a, info_a = env_ai.step(action_ai)
@@ -92,15 +105,25 @@ def main():
                 done_a = term_a or trunc_a
                 if score_a > best_a: best_a = score_a
 
+            # HUMAN LOGIC: Restartable
+            if reset_h_mid_run:
+                obs_h, _ = env_human.reset()
+                score_h = 0
+                done_h = False
+                human_attempts_this_run += 1
+            
             if not done_h:
                 action_h = 1 if flap_human else 0
                 obs_h, _, term_h, trunc_h, info_h = env_human.step(action_h)
                 score_h = info_h.get('score', 0)
                 done_h = term_h or trunc_h
+                if score_h > human_best_this_round: human_best_this_round = score_h
                 if score_h > best_h: best_h = score_h
             
-            if done_h and done_a:
+            if done_a:
                 state = "GAMEOVER"
+                history.append((total_ai_runs, human_best_this_round, score_a))
+                if len(history) > 4: history.pop(0)
 
         # --- RENDERING ---
         frame_h = env_human.render()
@@ -112,7 +135,7 @@ def main():
         pygame.draw.line(screen, (0, 0, 0), (288, 0), (288, 512), 4)
 
         # Helper for UI boxes
-        def draw_ui_box(text, pos, font, color=(255, 255, 255), bgcolor=(40, 40, 40), center=False):
+        def draw_ui_box(text, pos, font, color=(255, 255, 255), bgcolor=(40, 40, 40), center=False, border=True):
             txt_surf = font.render(text, True, color)
             if center:
                 txt_rect = txt_surf.get_rect(center=pos)
@@ -120,7 +143,7 @@ def main():
                 txt_rect = txt_surf.get_rect(topleft=pos)
             bg_rect = txt_rect.inflate(15, 8)
             pygame.draw.rect(screen, bgcolor, bg_rect)
-            pygame.draw.rect(screen, (200, 200, 200), bg_rect, 2)
+            if border: pygame.draw.rect(screen, (200, 200, 200), bg_rect, 2)
             screen.blit(txt_surf, txt_rect)
 
         # Permanent HUD
@@ -129,20 +152,30 @@ def main():
         draw_ui_box(f"HUMAN BEST: {best_h}", (10, 65), font_small, color=(100, 255, 100))
         draw_ui_box(f"AI BEST: {best_a}", (298, 65), font_small, color=(100, 255, 100))
         
-        # Move RUN counter to the bottom center
-        draw_ui_box(f"TOTAL ROUNDS: {total_runs}", (288, 485), font_small, center=True)
+        # --- ROUND HISTORY TABLE ---
+        table_x, table_y = 150, 420
+        draw_ui_box("MATCH HISTORY (LAST 4)", (288, table_y - 25), font_small, bgcolor=(20, 20, 20), center=True)
+        for i, (rn, sh_best, sa) in enumerate(history):
+            win_color = (255, 255, 0) if sa > sh_best else (255, 255, 255)
+            line = f"MATCH {rn}:  YOUR BEST: {sh_best}  vs  AI: {sa}"
+            draw_ui_box(line, (288, table_y + (i * 22)), font_small, color=win_color, center=True, border=False)
+
+        draw_ui_box(f"HUMAN ATTEMPTS THIS MATCH: {human_attempts_this_run}", (288, 500), font_small, center=True)
 
         if state == "START":
-            draw_ui_box("TOURNAMENT MODE", (288, 200), font_large, color=(255, 255, 0), center=True)
+            draw_ui_box("UNLIMITED HUMAN LIVES MODE", (288, 200), font_large, color=(255, 255, 0), center=True)
             draw_ui_box("Press SPACE to Start Battle", (288, 250), font_small, center=True)
         
         if state == "RUNNING":
-            if done_h: draw_ui_box("HUMAN CRASHED!", (144, 250), font_small, color=(255, 50, 50), center=True)
+            if done_h: 
+                draw_ui_box("HUMAN CRASHED!", (144, 250), font_small, color=(255, 50, 50), center=True)
+                draw_ui_box("Press SPACE to Try Again!", (144, 280), font_small, center=True, bgcolor=(0,100,0))
+                draw_ui_box(f"AI is still at Score {score_a}...", (432, 250), font_small, center=True)
             if done_a: draw_ui_box("AI CRASHED!", (432, 250), font_small, color=(255, 50, 50), center=True)
 
         if state == "GAMEOVER":
-            winner = "HUMAN WINS ROUND!" if score_h > score_a else "AI WINS ROUND!"
-            if score_h == score_a: winner = "ROUND TIED!"
+            winner = "HUMAN WINS!" if human_best_this_round > score_a else "AI WINS!"
+            if human_best_this_round == score_a: winner = "DRAW!"
             draw_ui_box(winner, (288, 220), font_large, color=(255, 255, 0), center=True)
             draw_ui_box("Press 'R' to Start Next Round", (288, 270), font_small, center=True)
 

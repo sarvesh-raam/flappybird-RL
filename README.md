@@ -43,4 +43,13 @@ python scripts/train_ppo.py
 | V1 | DQN | 100k | 6 | Baseline |
 
 ---
+## 🌐 Deployment
+This project is ready to be hosted on **Render** or **Railway** using the provided `Dockerfile`.
+
+### Steps to Host:
+1. **GitHub:** Push your code to a GitHub repository.
+2. **Platform:** Create a new "Web Service" on [Render](https://render.com).
+3. **Connect:** Link your GitHub repo.
+4. **Deploy:** Render will detect the `Dockerfile` and start the AI agent automatically.
+
 *Developed by Sarvesh Raam T K | B.Tech AI Student @ SRM University*

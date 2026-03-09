@@ -5,3 +5,4 @@ pygame
 numpy
 matplotlib
 opencv-python
+gunicorn

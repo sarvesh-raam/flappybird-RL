@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flappy RL | Tournament Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="name-screen" class="modal-overlay">
+        <div class="modal-card glass">
+            <h2>WELCOME PILOT</h2>
+            <p>Enter your callsign to challenge the AI</p>
+            <input type="text" id="player-name-input" placeholder="YOUR NAME" maxlength="12">
+            <button id="start-btn">ENTER ARENA</button>
+        </div>
+    </div>
+
+    <button id="theme-btn" class="theme-toggle" title="Switch Theme">🌙</button>
+
+    <div class="container">
+        <header>
+            <h1>FLAPPY <span class="accent">RL</span> TOURNAMENT</h1>
+            <p class="subtitle">Human vs AI</p>
+        </header>
+
+        <main class="dashboard">
+            <div class="main-display">
+                <div class="game-console glass">
+                    <div class="video-container">
+                        <img id="game-stream" src="{{ url_for('video_feed') }}" alt="Game Stream">
+                        <div id="overlay" class="overlay">
+                            <div class="overlay-card glass">
+                                <h2 id="overlay-title">READY?</h2>
+                                <p id="overlay-msg">PRESS SPACE TO BATTLE</p>
+                            </div>
+                        </div>
+                        <div class="v-line"></div>
+                    </div>
+                    <div class="labels">
+                        <span id="label-human">HUMAN</span>
+                        <span>AI</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="side-panel">
+                <div class="stats-panel">
+                    <div class="stat-card card glass green">
+                        <h3><span id="player-name-display">YOU</span></h3>
+                        <div id="score-h" class="big-num">0</div>
+                        <p>BEST: <span id="best-h">0</span></p>
+                    </div>
+                    <div class="stat-card card glass blue">
+                        <h3>AI</h3>
+                        <div id="score-a" class="big-num">0</div>
+                        <p>BEST: <span id="best-a">0</span></p>
+                    </div>
+                </div>
+
+                <div class="leaderboard card glass">
+                    <h3>🏆 LEADERBOARD</h3>
+                    <div id="leaderboard-list">
+                        <!-- Leaderboard rows injected here -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+
+</html>
