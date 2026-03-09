@@ -190,17 +190,18 @@ def game_loop():
                         if game.score_h > game.best_h: game.best_h = game.score_h
                         if game.score_h > game.human_best_this_round: game.human_best_this_round = game.score_h
                     
-                    # Stop round once both or AI dies (Tournament Style)
-                    if game.done_a:
+                    # Stop round when EITHER player crashes - human shouldn't be stuck watching AI
+                    if game.done_h or game.done_a:
                         if running:
                             game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
                             if len(game.history) > 5: game.history.pop(0)
                         
                         game.is_running = False
                         
-                        # Fix: reset birds immediately so they are back at the top on the Ready screen
+                        # Reset both birds to top for the Ready screen
                         game.obs_h, _ = game.env_human.reset()
                         game.obs_a, _ = game.env_ai.reset()
+
 
             # 4. Rendering (NO LOCK) - High Quality Sync with Loop
             f_h = game.env_human.render()
