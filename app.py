@@ -236,18 +236,36 @@ def game_loop():
 def index():
     return render_template('index.html')
 
+@app.route('/frame')
+def frame():
+    """Returns the latest game frame as a single JPEG image. 
+    Frontend polls this every ~100ms instead of using MJPEG stream.
+    This avoids HF rate-limiting long-lived connections."""
+    global game
+    if game.latest_frame:
+        return Response(game.latest_frame, mimetype='image/jpeg',
+                        headers={'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'})
+    # Return a 1x1 transparent placeholder if no frame yet
+    import base64
+    placeholder = base64.b64decode(
+        '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8U'
+        'HRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAARC'
+        'AABAAEDASIA...AAD/2Q==')
+    return Response(game.latest_frame or b'', mimetype='image/jpeg',
+                    headers={'Cache-Control': 'no-store'})
+
 def gen_frames():
     global game
     while True:
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        # Independent streaming speed
         time.sleep(0.04)
 
 @app.route('/video_feed')
 def video_feed():
     return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 @app.route('/action', methods=['POST'])
 def action():

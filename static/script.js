@@ -147,5 +147,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Leaderboard Polling - Slowed to 15s
     setInterval(updateLeaderboard, 15000);
     updateLeaderboard();
+
+    // === FRAME POLLING (replaces MJPEG stream) ===
+    // Polls /frame at ~15fps instead of one long-lived MJPEG connection.
+    // This avoids Hugging Face's 429 rate-limiting on streaming connections.
+    const gameStream = document.getElementById('game-stream');
+    function refreshFrame() {
+        // Cache-bust so browser doesn't serve a stale image
+        gameStream.src = '/frame?t=' + Date.now();
+    }
+    // Start polling once the first image loads to avoid broken frames
+    gameStream.onload = function () {
+        setTimeout(refreshFrame, 67); // ~15 FPS
+    };
+    gameStream.onerror = function () {
+        setTimeout(refreshFrame, 200); // Slow retry on error
+    };
+    refreshFrame(); // Initial load
 });
 
