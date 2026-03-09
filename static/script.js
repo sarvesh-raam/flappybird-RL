@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { }
     }
 
-    // Main Update Loop - Slowed down to 800ms to avoid 429 Rate Limit
+    // Main Update Loop - 300ms for real-time scores without triggering 429
     setInterval(async () => {
         try {
             const res = await fetch('/stats');
@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 aiScoreSubmitted = true;
             }
         } catch (e) { }
-    }, 800);
+    }, 300);
 
     // Leaderboard Polling - Slowed to 15s
     setInterval(updateLeaderboard, 15000);
