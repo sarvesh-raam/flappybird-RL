@@ -1,53 +1,46 @@
-# Flappy-RL 🚀
+# Flappy-RL: Superhuman AI Agent 🚀
 
-An autonomous Flappy Bird agent trained using Deep Reinforcement Learning (DQN). This project demonstrates the implementation of a Deep Q-Network to solve a discrete action-space problem in a dynamic environment.
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Reinforcement Learning](https://img.shields.io/badge/RL-PPO--%20%26--DQN-orange.svg)](https://stable-baselines3.readthedocs.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 📝 Project Description
-This repository contains a Reinforcement Learning (RL) agent capable of playing Flappy Bird at a superhuman level. By utilizing the `flappy-bird-gymnasium` environment and the `Stable-Baselines3` library, the agent learns to optimize its "flap" timing based on its vertical position, velocity, and the coordinates of the upcoming pipe gaps.
+An advanced Reinforcement Learning project that trains an autonomous agent to master Flappy Bird using state-of-the-art algorithms (PPO & DQN).
 
-### Key Features:
-- **Algorithm:** Deep Q-Network (DQN) with an MLP Policy.
-- **Environment:** State-based `gymnasium` wrapper for Flappy Bird.
-- **Automated Video Recording:** Post-training evaluation script that records a MP4 video of the agent's performance.
-- **Checkpoint System:** Saves model weights during training to prevent data loss.
+## 🌟 Strategic Features
+- **Next-Gen Brain (PPO):** Implemented Proximal Policy Optimization with an MLP policy for stable, high-performance gameplay.
+- **Reward Shaping:** Integrated a custom reward wrapper that guides the agent to stay in the center of pipe gaps, accelerating the learning curve.
+- **Tournament Mode:** Developed a real-time, side-by-side Pygame interface for Human vs. AI competition.
+- **Professional Architecture:** Modular script organization with a clear separation between training, evaluation, and legacy models.
 
-## ⚙️ Configuration & Hyperparameters
+## 🏗️ Project Architecture
+```mermaid
+graph TD
+    A[Gymnasium Env] --> B[Reward Shaping Wrapper]
+    B --> C{RL Agent}
+    C --> D[PPO Model - Superhuman]
+    C --> E[DQN Model - Legacy]
+    D --> F[Tournament Mode Demo]
+```
 
-The agent is trained with the following configuration (found in `train.py`):
+## 🚀 Presentation & Usage
+### Live Demo (Tournament Mode)
+To see the AI compete against a human in real-time:
+```bash
+python side_by_side.py
+```
 
-| Parameter | Value | Description |
-|-----------|-------|-------------|
-| **Algorithm** | DQN | Deep Q-Network |
-| **Policy** | MlpPolicy | Multi-layer Perceptron |
-| **Learning Rate** | 1e-4 | Step size for weight updates |
-| **Buffer Size** | 50,000 | Number of past experiences stored for replay |
-| **Batch Size** | 64 | Number of samples used per gradient update |
-| **Gamma (γ)** | 0.99 | Discount factor for future rewards |
-| **Exploration (ε)** | 0.1 → 0.01 | Fraction of time spent on random actions |
-| **Total Timesteps** | 100,000 | Number of iterations for the training phase |
+### Advanced Training
+To experiment with the training parameters or retrain the model:
+```bash
+python scripts/train_ppo.py
+```
 
-## 🛠️ Setup & Usage
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/Flappy-RL.git
-   cd Flappy-RL
-   ```
-
-2. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. **Train the agent:**
-   ```bash
-   python train.py
-   ```
-
-4. **Evaluate and Record:**
-   ```bash
-   python eval.py
-   ```
+## ⚙️ Model Benchmarks
+| Model | Algorithm | Steps | Peak Score | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **V3 (Latest)** | **PPO** | 300k | **80+** | **Mastered** |
+| V2 | DQN | 250k | 30 | Stable |
+| V1 | DQN | 100k | 6 | Baseline |
 
 ---
-*Created as part of an Advanced RL Portfolio project.*
+*Developed by Sarvesh Raam T K | B.Tech AI Student @ SRM University*
