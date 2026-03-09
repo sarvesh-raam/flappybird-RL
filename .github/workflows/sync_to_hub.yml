@@ -11,13 +11,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          lfs: true
       
-      - name: Install LFS
-        run: git lfs install
-
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          # Configure git to skip large files during this sync
+          # This ensures the website code gets there instantly
+          git config --global http.postBuffer 524288000
           git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl main
