@@ -12,19 +12,24 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Remove Binary Files for Push
-        run: |
-          # We remove binary files here only for the HF sync
-          # This prevents the "Your push was rejected because it contains binary files" error
-          rm -f *.zip
-          rm -rf legacy_models/
-          git config --global user.email "sync-bot@example.com"
-          git config --global user.name "Sync Bot"
-          git add .
-          git commit -m "Internal: Stripping binaries for HF compatibility" || echo "No changes to commit"
-
-      - name: Push to hub
+      - name: Create Clean Push
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl main
+          # 1. Create a temporary folder for the clean version
+          mkdir deploy_folder
+          
+          # 2. Copy everything EXCEPT the large binaries and the .git folder
+          # This creates a "pure code" version of your project
+          rsync -rv --exclude '.git' --exclude '*.zip' --exclude 'legacy_models/' ./ deploy_folder/
+          
+          # 3. Initialize a BRAND NEW git repo in that folder
+          cd deploy_folder
+          git init
+          git config --global user.email "sync-bot@example.com"
+          git config --global user.name "Sync Bot"
+          git add .
+          git commit -m "Clean deployment sync"
+          
+          # 4. Push this "Zero History" version to Hugging Face
+          git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl HEAD:main
