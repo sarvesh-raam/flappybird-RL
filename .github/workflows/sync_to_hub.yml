@@ -2,7 +2,6 @@ name: Sync to Hugging Face
 on:
   push:
     branches: [main]
-  # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
 
 jobs:
@@ -13,7 +12,12 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
+      
+      - name: Install LFS
+        run: git lfs install
+
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl main
+        run: |
+          git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl main
