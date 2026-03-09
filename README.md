@@ -1,3 +1,12 @@
+---
+title: FlappyBird-RL
+emoji: 🐦
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+---
+
 # Flappy-RL: Superhuman AI Agent 🚀
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
