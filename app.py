@@ -1,5 +1,5 @@
 import os
-# SYNC TRIGGER - Turbo-Sync v3 (Binary Header Mode)
+# SYNC TRIGGER - Turbo-Sync v4 (Sync-Priority Mode)
 import logging
 import threading
 import time
@@ -18,7 +18,6 @@ import numpy as np
 app = Flask(__name__)
 logging.basicConfig(level=logging.ERROR)
 
-# --- LEADERBOARD & MODEL ---
 def load_model():
     p = "flappy_ppo_final.zip"
     if os.path.exists(p):
@@ -50,7 +49,7 @@ class GameState:
 
 game = GameState()
 
-# --- GAME LOOP (30 FPS) ---
+# --- GAME LOOP ---
 def game_loop():
     global game
     while True:
@@ -63,20 +62,19 @@ def game_loop():
             d_a = game.done_a
         
         if running:
-            # 1. AI Action (Always active if not crashed)
+            # AI
             ai_act = 0
             if not d_a and game.model:
                 try: ai_act, _ = game.model.predict(game.obs_a, deterministic=True)
                 except: pass
             
-            # 2. Step Human
+            # Step
             if not d_h:
                 game.obs_h, _, term_h, trunc_h, info_h = game.env_h.step(1 if flap else 0)
                 game.score_h = info_h.get("score", 0)
                 if game.score_h > game.best_h: game.best_h = game.score_h
                 if term_h or trunc_h: game.done_h = True
             
-            # 3. Step AI (Independent)
             if not d_a:
                 game.obs_a, _, term_a, trunc_a, info_a = game.env_a.step(ai_act)
                 game.score_a = info_a.get("score", 0)
@@ -86,7 +84,7 @@ def game_loop():
             if game.done_h and game.done_a:
                 game.is_running = False
 
-        # 4. Render Composite
+        # Render
         fh = game.env_h.render()
         fa = game.env_a.render()
         if fh is not None and fa is not None:
@@ -94,27 +92,37 @@ def game_loop():
             h, w, _ = comb.shape
             cv2.line(comb, (w // 2, 0), (w // 2, h), (255, 255, 255), 2)
             bgr = cv2.cvtColor(comb, cv2.COLOR_RGB2BGR)
-            # High quality JPG for clarity, binary for speed
-            ret, buf = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            # Efficient Compression for HF
+            ret, buf = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
             if ret: game.latest_frame = buf.tobytes()
 
-        # Target 30Hz
-        time.sleep(max(0.005, 0.033 - (time.time() - start)))
+        time.sleep(max(0.005, 0.03 - (time.time() - start)))
 
-# --- ROUTES ---
-@app.route('/')
-def index(): return render_template('index.html')
+# --- UNIFIED SYNC ROUTE ---
+@app.route('/sync')
+def unified_sync():
+    """Sync state and return binary image in ONE request to avoid 429."""
+    global game
+    
+    # Handle Flap/Start if passed in query (latency optimization)
+    action_type = request.args.get('act')
+    if action_type == 'flap':
+        with game.lock:
+            if game.is_running and not game.done_h:
+                game.flap_human = True
+            else:
+                game.env_h.reset(); game.env_a.reset()
+                game.score_h = 0; game.score_a = 0
+                game.done_h = False; game.done_a = False
+                game.is_running = True
 
-@app.route('/sync.jpg')
-def sync_jpg():
-    """Binary Image endpoint with state in HTTP Headers for ultra-low latency."""
     if not game.latest_frame:
         return make_response(b'', 404)
     
     resp = make_response(game.latest_frame)
     resp.headers['Content-Type'] = 'image/jpeg'
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
-    # Pack game data into custom headers (The 'Turbo-Headers' approach)
+    # Core state in headers
     resp.headers['X-Score-H'] = str(game.score_h)
     resp.headers['X-Score-A'] = str(game.score_a)
     resp.headers['X-Best-H'] = str(game.best_h)
@@ -123,26 +131,11 @@ def sync_jpg():
     resp.headers['X-Done-H'] = '1' if game.done_h else '0'
     return resp
 
-@app.route('/action', methods=['POST'])
-def action():
-    data = request.json
-    atype = data.get('type')
-    if atype == 'flap':
-        with game.lock:
-            if game.is_running and not game.done_h:
-                game.flap_human = True
-            else:
-                # Reset for new duel
-                game.env_h.reset(); game.env_a.reset()
-                game.score_h = 0; game.score_a = 0
-                game.done_h = False; game.done_a = False
-                game.is_running = True
-    return jsonify(success=True)
+@app.route('/')
+def index(): return render_template('index.html')
 
 @app.route('/leaderboard')
-def lb():
-    # Return dummy/saved leaderboard
-    return jsonify(board=[])
+def lb(): return jsonify(board=[])
 
 if __name__ == '__main__':
     threading.Thread(target=game_loop, daemon=True).start()

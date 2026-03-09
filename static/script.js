@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const best_A = document.getElementById('best-a');
 
     let tabVisible = true;
+    let pendingAction = null;
+    let syncInterval = 100; // Default 10 FPS (Safe Zone for HF)
+
     document.addEventListener('visibilitychange', () => { tabVisible = !document.hidden; });
 
     startBtn.addEventListener('click', () => {
@@ -24,37 +27,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); triggerFlap(); } });
-    window.addEventListener('touchstart', (e) => { if (e.target.id === 'game-stream') { e.preventDefault(); triggerFlap(); } }, { passive: false });
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); pendingAction = 'flap'; } });
+    window.addEventListener('touchstart', (e) => { if (e.target.id === 'game-stream') { e.preventDefault(); pendingAction = 'flap'; } }, { passive: false });
 
-    function triggerFlap() {
-        if (nameScreen.classList.contains('hidden')) {
-            fetch('/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'flap' })
-            });
-        }
-    }
-
-    // Adaptive Sync Loop (Replaces setInterval for zero-lag)
+    // Adaptive Unified Sync Loop
     async function pollSync() {
         if (!tabVisible) {
-            setTimeout(pollSync, 500);
+            setTimeout(pollSync, 1000);
             return;
         }
 
         try {
             const startTime = Date.now();
-            const res = await fetch('/sync.jpg?t=' + startTime);
+            let url = '/sync?t=' + startTime;
 
-            // 1. Update Image (Binary Blob)
+            // ATTACH ACTION TO SYNC (Turbo-Sync v4)
+            // One request handles both movement and action
+            if (pendingAction) {
+                url += '&act=' + pendingAction;
+                pendingAction = null;
+            }
+
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('429 or Server Busy');
+
+            // 1. Update Image
             const blob = await res.blob();
             const oldUrl = gameImg.src;
             gameImg.src = URL.createObjectURL(blob);
             if (oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
 
-            // 2. Update Stats (From Headers)
+            // 2. Update Stats (Headers)
             scoreH.innerText = res.headers.get('X-Score-H');
             scoreA.innerText = res.headers.get('X-Score-A');
             bestH.innerText = res.headers.get('X-Best-H');
@@ -70,12 +73,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 overlay.classList.add('hidden');
             }
 
-            // 3. Adaptive Timing (Aim for ~15-20 FPS on web)
+            // 3. Rate Limit Protection
+            // Keep at 10-12 FPS to stay under Hugging Face's radar
             const elapsed = Date.now() - startTime;
-            const wait = Math.max(5, 50 - elapsed);
-            setTimeout(pollSync, wait);
+            setTimeout(pollSync, Math.max(10, syncInterval - elapsed));
         } catch (e) {
-            setTimeout(pollSync, 200);
+            // Cool down on error (Hugging Face is likely rate-limiting)
+            console.error("Network Throttling - Waiting for cool down...");
+            setTimeout(pollSync, 2000);
         }
     }
 });
