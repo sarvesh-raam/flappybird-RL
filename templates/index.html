@@ -1,169 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 
 <head>
+    <title>Flappybird | Original Engine Test</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no">
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Flappybird RL | Pro Arena</title>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <!-- Versioning forced cache clear -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7.2">
+    <script defer="defer" src="{{ url_for('static', filename='runtime.js') }}"></script>
+    <script defer="defer" src="{{ url_for('static', filename='index.js') }}"></script>
+    <link href="{{ url_for('static', filename='index.css') }}" rel="stylesheet">
     <style>
-        :root {
-            --bg-color: #272738;
-            --accent: #f7dc6f;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
         body {
-            background-color: var(--bg-color);
-            color: white;
-            font-family: 'Press Start 2P', cursive;
+            background: #272738;
+            margin: 0;
             display: flex;
-            flex-direction: column;
-            align-items: center;
             justify-content: center;
+            align-items: center;
             height: 100vh;
             overflow: hidden;
         }
 
-        #game-container {
-            position: relative;
-            background: #4ec0ca;
-            border: 4px solid #543847;
-            border-radius: 8px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-        }
-
         canvas {
-            display: block;
-            image-rendering: pixelated;
-        }
-
-        .ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .scoreboard {
-            width: 100%;
-            display: flex;
-            justify-content: space-around;
-            padding: 20px;
-            text-shadow: 2px 2px 0 #000;
-        }
-
-        .score-box {
-            text-align: center;
-        }
-
-        .score-val {
-            font-size: 28px;
-            margin-top: 5px;
-            color: var(--accent);
-        }
-
-        .v-split {
-            position: absolute;
-            left: 50%;
-            top: 0;
-            bottom: 0;
-            width: 3px;
-            background: rgba(0, 0, 0, 0.2);
-            z-index: 5;
-        }
-
-        #overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.4);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 20;
-        }
-
-        .modal {
-            background: #ded895;
-            border: 4px solid #543847;
-            padding: 25px;
-            text-align: center;
-            color: #543847;
-            box-shadow: 0 6px 0 #543847;
-        }
-
-        input {
-            width: 80%;
-            padding: 10px;
-            margin: 15px 0;
-            font-family: 'Press Start 2P', cursive;
-            border: 3px solid #543847;
-            text-align: center;
-        }
-
-        button {
-            padding: 12px 24px;
-            background: #f7dc6f;
-            border: 3px solid #543847;
-            font-family: 'Press Start 2P', cursive;
-            cursor: pointer;
-            box-shadow: 0 4px 0 #543847;
-        }
-
-        button:active {
-            transform: translateY(2px);
-            box-shadow: 0 2px 0 #543847;
-        }
-
-        .hidden {
-            display: none !important;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
         }
     </style>
 </head>
 
 <body>
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-        <div class="v-split"></div>
-        <div class="ui-layer">
-            <div class="scoreboard">
-                <div class="score-box">
-                    <div id="label-h">HUMAN</div>
-                    <div id="score-h" class="score-val">0</div>
-                </div>
-                <div class="score-box">
-                    <div>AI BRAIN</div>
-                    <div id="score-a" class="score-val">0</div>
-                </div>
-            </div>
-        </div>
-        <div id="overlay">
-            <div id="modal" class="modal">
-                <h2 id="modal-title">FLAPPY RL</h2>
-                <div id="name-zone">
-                    <input type="text" id="name-input" placeholder="NAME" maxlength="8">
-                </div>
-                <p id="modal-msg" style="font-size: 10px; margin: 10px 0;">PRESS SPACE TO FLY</p>
-                <button id="btn-start">START ARENA</button>
-            </div>
-        </div>
+    <canvas id="main-canvas"></canvas>
+    <div id="loading-modal">
+        <div>Loading...</div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=7.2"></script>
 </body>
 
 </html>
