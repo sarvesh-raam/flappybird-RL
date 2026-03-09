@@ -251,4 +251,5 @@ def stats():
 
 if __name__ == '__main__':
     threading.Thread(target=game_loop, daemon=True).start()
-    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True)
+    # Port 7860 is required for Hugging Face Spaces
+    app.run(host='0.0.0.0', port=7860, debug=False, threaded=True)

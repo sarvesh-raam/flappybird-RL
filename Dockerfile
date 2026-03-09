@@ -26,8 +26,8 @@ RUN pip install --no-cache-dir stable-baselines3[extra] flappy-bird-gymnasium
 # Copy the rest of the application code
 COPY . .
 
-# Expose the port
-EXPOSE 5000
+# Expose the port (7860 for Hugging Face)
+EXPOSE 7860
 
 # Start the app
 CMD ["python", "app.py"]
