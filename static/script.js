@@ -1,142 +1,116 @@
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('game-canvas');
     const ctx = canvas.getContext('2d');
-    const nameScreen = document.getElementById('name-modal');
-    const retryScreen = document.getElementById('retry-modal');
     const overlay = document.getElementById('overlay');
-    const startBtn = document.getElementById('start-btn');
-    const retryBtn = document.getElementById('retry-btn');
+    const btnStart = document.getElementById('btn-start');
     const nameInput = document.getElementById('name-input');
 
-    // Core Game Config
+    // Config
     const W = 288;
     const H = 512;
     canvas.width = W * 2;
     canvas.height = H;
 
-    // Assets
+    // Asset Atlas
     const atlas = new Image();
-    atlas.src = '/static/atlas.png';
-    let assetsLoaded = false;
-    atlas.onload = () => { assetsLoaded = true; };
+    atlas.src = '/static/atlas.png?v=7.2';
+    let loaded = false;
+    atlas.onload = () => { loaded = true; };
 
-    // Sprite Mapping from atlas.png
-    const S = {
-        bg: { x: 0, y: 0, w: 288, h: 512 },
-        bg_night: { x: 288, y: 0, w: 288, h: 512 },
-        ground: { x: 584, y: 0, w: 336, h: 112 },
-        pipe_top: { x: 112, y: 646, w: 52, h: 320 },
-        pipe_bot: { x: 168, y: 646, w: 52, h: 320 },
+    // Pixel Perfect Coordinates
+    const SPRITES = {
+        bg: [0, 0, 288, 512],
+        bg_night: [288, 0, 288, 512],
+        ground: [584, 0, 336, 112],
+        pipe_top: [112, 646, 52, 320],
+        pipe_bot: [168, 646, 52, 320],
         birds: [
-            // Yellow (Human)
-            [{ x: 3, y: 491 }, { x: 31, y: 491 }, { x: 59, y: 491 }],
-            // Green (AI)
-            [{ x: 3, y: 529 }, { x: 31, y: 529 }, { x: 59, y: 529 }]
+            [[3, 491, 34, 24], [31, 491, 34, 24], [59, 491, 34, 24]], // Yellow
+            [[3, 529, 34, 24], [31, 529, 34, 24], [59, 529, 34, 24]]  // Green
         ]
     };
 
-    let gameState = null;
-    let playerName = "PILOT";
-    let pendingAction = null;
-    let tabVisible = true;
+    let s = null; // Server state
+    let pendingAct = null;
     let scroll = 0;
-
+    let tabVisible = true;
     document.addEventListener('visibilitychange', () => { tabVisible = !document.hidden; });
 
-    // --- RESTART LOGIC ---
-    function startDuel() {
-        if (nameInput.value.trim()) playerName = nameInput.value.trim().toUpperCase();
-        document.getElementById('p-name').innerText = playerName;
-        nameScreen.classList.add('hidden');
-        retryScreen.classList.add('hidden');
+    function play() {
+        const n = nameInput.value.trim().toUpperCase() || "PLAYER";
+        document.getElementById('label-h').innerText = n;
         overlay.classList.add('hidden');
-
-        // Initial sync to start physics thread
-        fetch('/sync?act=flap&name=' + playerName);
-        if (!gameState) {
-            requestAnimationFrame(gameLoop);
-            syncLoop();
-        }
+        if (!s) { sync(); requestAnimationFrame(draw); }
+        pendingAct = 'flap';
     }
 
-    startBtn.addEventListener('click', startDuel);
-    retryBtn.addEventListener('click', startDuel);
+    btnStart.addEventListener('click', play);
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); if (overlay.classList.contains('hidden')) pendingAct = 'flap'; else play(); } });
 
-    // Controls
-    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); pendingAction = 'flap'; } });
-    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); pendingAction = 'flap'; }, { passive: false });
-
-    // --- NET SYNC ---
-    async function syncLoop() {
-        if (!tabVisible) { setTimeout(syncLoop, 1000); return; }
+    async function sync() {
+        if (!tabVisible) { setTimeout(sync, 1000); return; }
         try {
             let url = '/sync?t=' + Date.now();
-            if (pendingAction) { url += '&act=' + pendingAction; pendingAction = null; }
+            if (pendingAct) { url += '&act=' + pendingAct; pendingAct = null; }
             const res = await fetch(url);
-            gameState = await res.json();
+            s = await res.json();
 
-            // Sync UI
-            document.getElementById('score-h').innerText = gameState.score_h;
-            document.getElementById('score-a').innerText = gameState.score_a;
-            document.getElementById('best-h').innerText = 'BEST: ' + gameState.best_h;
-            document.getElementById('best-a').innerText = 'BEST: ' + gameState.best_a;
+            document.getElementById('score-h').innerText = s.score_h;
+            document.getElementById('score-a').innerText = s.score_a;
 
-            if (gameState.done_h && gameState.running === false) {
+            if (!s.running && s.done_h) {
                 overlay.classList.remove('hidden');
-                nameScreen.classList.add('hidden');
-                retryScreen.classList.remove('hidden');
-                document.getElementById('final-score').innerText = 'SCORE: ' + gameState.score_h;
+                document.getElementById('modal-title').innerText = "GAME OVER";
+                document.getElementById('btn-start').innerText = "RETRY";
+                document.getElementById('name-zone').classList.add('hidden');
             }
         } catch (e) { }
-        setTimeout(syncLoop, 40); // 25Hz sync - ultra low latency
+        setTimeout(sync, 40);
     }
 
-    // --- RENDERER (60FPS) ---
-    function drawEntity(x, y, rot, typeIdx) {
-        const frame = Math.floor(Date.now() / 100) % 3;
-        const sprite = S.birds[typeIdx][frame];
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate((rot || 0) * Math.PI / 180);
-        ctx.drawImage(atlas, sprite.x, sprite.y, 34, 24, -17, -12, 34, 24);
-        ctx.restore();
-    }
+    function draw() {
+        if (!loaded || !s) { requestAnimationFrame(draw); return; }
 
-    function drawPipes(pipes, offsetX) {
-        pipes.forEach(p => {
-            const x = p.x + offsetX;
-            const y = p.y;
-            // Draw Top
-            ctx.drawImage(atlas, S.pipe_top.x, S.pipe_top.y, 52, 320, x, y - 320, 52, 320);
-            // Draw Bottom (Gym gap is ~100)
-            ctx.drawImage(atlas, S.pipe_bot.x, S.pipe_bot.y, 52, 320, x, y + 100, 52, 320);
+        // Clear
+        ctx.fillStyle = '#4ec0ca';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Backgrounds
+        ctx.drawImage(atlas, ...SPRITES.bg, 0, 0, W, H);
+        ctx.drawImage(atlas, ...SPRITES.bg_night, W, 0, W, H);
+
+        if (s.running) scroll = (scroll + 3) % 288;
+
+        // Draw Pipes (Arena 1)
+        s.h.pipes.forEach(p => {
+            ctx.drawImage(atlas, ...SPRITES.pipe_top, p.x, p.y - 320, 52, 320);
+            ctx.drawImage(atlas, ...SPRITES.pipe_bot, p.x, p.y + 100, 52, 320);
         });
-    }
 
-    function gameLoop() {
-        if (!assetsLoaded || !gameState) { requestAnimationFrame(gameLoop); return; }
+        // Draw Pipes (Arena 2)
+        s.a.pipes.forEach(p => {
+            ctx.drawImage(atlas, ...SPRITES.pipe_top, p.x + W, p.y - 320, 52, 320);
+            ctx.drawImage(atlas, ...SPRITES.pipe_bot, p.x + W, p.y + 100, 52, 320);
+        });
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Draw Birds
+        const f = Math.floor(Date.now() / 100) % 3;
+        // Human
+        ctx.save(); ctx.translate(50, s.h.y);
+        ctx.rotate((s.h.rot || 0) * Math.PI / 180);
+        ctx.drawImage(atlas, ...SPRITES.birds[0][f], -17, -12, 34, 24);
+        ctx.restore();
+        // AI
+        ctx.save(); ctx.translate(W + 50, s.a.y);
+        ctx.rotate((s.a.rot || 0) * Math.PI / 180);
+        ctx.drawImage(atlas, ...SPRITES.birds[1][f], -17, -12, 34, 24);
+        ctx.restore();
 
-        // 1. Draw Backgrounds
-        ctx.drawImage(atlas, S.bg.x, S.bg.y, S.bg.w, S.bg.h, 0, 0, W, H);
-        ctx.drawImage(atlas, S.bg_night.x, S.bg_night.y, S.bg_night.w, S.bg_night.h, W, 0, W, H);
+        // Ground
+        ctx.drawImage(atlas, ...SPRITES.ground, -scroll, H - 112, 336, 112);
+        ctx.drawImage(atlas, ...SPRITES.ground, 336 - scroll, H - 112, 336, 112);
+        ctx.drawImage(atlas, ...SPRITES.ground, 672 - scroll, H - 112, 336, 112);
 
-        if (gameState.running) scroll = (scroll + 3.2) % 336;
-
-        // 2. Draw Pipes
-        drawPipes(gameState.h.pipes, 0);
-        drawPipes(gameState.a.pipes, W);
-
-        // 3. Draw Birds
-        drawEntity(50, gameState.h.y, gameState.h.rot, 0); // Yellow (Human)
-        drawEntity(W + 50, gameState.a.y, gameState.a.rot, 1); // Green (AI)
-
-        // 4. Draw Ground
-        ctx.drawImage(atlas, S.ground.x, S.ground.y, 336, 112, -scroll, H - 110, 336, 112);
-        ctx.drawImage(atlas, S.ground.x, S.ground.y, 336, 112, 336 - scroll, H - 110, 336, 112);
-        ctx.drawImage(atlas, S.ground.x, S.ground.y, 336, 112, 672 - scroll, H - 110, 336, 112);
-
-        requestAnimationFrame(gameLoop);
+        requestAnimationFrame(draw);
     }
 });

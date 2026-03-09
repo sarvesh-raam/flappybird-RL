@@ -4,8 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Flappybird RL | AI Arena</title>
+    <title>Flappybird RL | Pro Arena</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <!-- Versioning forced cache clear -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7.2">
     <style>
         :root {
             --bg-color: #272738;
@@ -35,8 +37,7 @@
             background: #4ec0ca;
             border: 4px solid #543847;
             border-radius: 8px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            max-width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
         }
 
         canvas {
@@ -62,7 +63,6 @@
             justify-content: space-around;
             padding: 20px;
             text-shadow: 2px 2px 0 #000;
-            font-size: 14px;
         }
 
         .score-box {
@@ -70,57 +70,9 @@
         }
 
         .score-val {
-            font-size: 24px;
+            font-size: 28px;
             margin-top: 5px;
             color: var(--accent);
-        }
-
-        #overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            pointer-events: all;
-            z-index: 10;
-        }
-
-        .modal-card {
-            background: #ded895;
-            border: 4px solid #543847;
-            padding: 30px;
-            text-align: center;
-            color: #543847;
-            border-radius: 4px;
-        }
-
-        input {
-            width: 100%;
-            padding: 10px;
-            margin: 20px 0;
-            font-family: 'Press Start 2P', cursive;
-            border: 3px solid #543847;
-            text-align: center;
-            outline: none;
-        }
-
-        button {
-            padding: 12px 24px;
-            background: #f7dc6f;
-            border: 3px solid #543847;
-            font-family: 'Press Start 2P', cursive;
-            cursor: pointer;
-            box-shadow: 0 4px 0 #543847;
-        }
-
-        button:active {
-            transform: translateY(4px);
-            box-shadow: none;
         }
 
         .v-split {
@@ -133,27 +85,53 @@
             z-index: 5;
         }
 
-        .labels {
+        #overlay {
             position: absolute;
-            bottom: 80px;
+            top: 0;
+            left: 0;
             width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
             display: flex;
-            justify-content: space-around;
-            font-size: 10px;
-            text-shadow: 1px 1px 0 #000;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+
+        .modal {
+            background: #ded895;
+            border: 4px solid #543847;
+            padding: 25px;
+            text-align: center;
+            color: #543847;
+            box-shadow: 0 6px 0 #543847;
+        }
+
+        input {
+            width: 80%;
+            padding: 10px;
+            margin: 15px 0;
+            font-family: 'Press Start 2P', cursive;
+            border: 3px solid #543847;
+            text-align: center;
+        }
+
+        button {
+            padding: 12px 24px;
+            background: #f7dc6f;
+            border: 3px solid #543847;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #543847;
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #543847;
         }
 
         .hidden {
             display: none !important;
-        }
-
-        .brain-badge {
-            background: #ff4757;
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 8px;
-            margin-top: 5px;
         }
     </style>
 </head>
@@ -165,36 +143,27 @@
         <div class="ui-layer">
             <div class="scoreboard">
                 <div class="score-box">
-                    <div id="p-name">HUMAN</div>
+                    <div id="label-h">HUMAN</div>
                     <div id="score-h" class="score-val">0</div>
                 </div>
                 <div class="score-box">
                     <div>AI BRAIN</div>
                     <div id="score-a" class="score-val">0</div>
-                    <div class="brain-badge">LIVE PPO MODEL</div>
                 </div>
-            </div>
-            <div class="labels">
-                <span>YOU</span>
-                <span>AI</span>
             </div>
         </div>
         <div id="overlay">
-            <div id="name-modal" class="modal-card">
-                <h2>BIRD RL</h2>
-                <p style="font-size: 10px; margin-top:10px;">HUMAN vs AI ARENA</p>
-                <input type="text" id="name-input" placeholder="NAME" maxlength="10">
-                <button id="start-btn">FLAP TO START</button>
-            </div>
-            <div id="retry-modal" class="modal-card hidden">
-                <h2 id="result-title">YOU CRASHED</h2>
-                <p id="final-score" style="margin:20px 0;">SCORE: 0</p>
-                <button id="retry-btn">RETRY</button>
+            <div id="modal" class="modal">
+                <h2 id="modal-title">FLAPPY RL</h2>
+                <div id="name-zone">
+                    <input type="text" id="name-input" placeholder="NAME" maxlength="8">
+                </div>
+                <p id="modal-msg" style="font-size: 10px; margin: 10px 0;">PRESS SPACE TO FLY</p>
+                <button id="btn-start">START ARENA</button>
             </div>
         </div>
     </div>
-
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=7.2"></script>
 </body>
 
 </html>
