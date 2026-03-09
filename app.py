@@ -228,9 +228,9 @@ def game_loop():
             logger.error(f"FATAL GAME LOOP ERROR: {e}")
             time.sleep(1) 
             
-        # Target ~35hz loop for better web control
+        # Target ~20Hz - fair speed for human reaction time
         elapsed = time.time() - loop_start
-        sleep_time = max(0.005, 0.028 - elapsed)
+        sleep_time = max(0.005, 0.05 - elapsed)
         time.sleep(sleep_time)
 
 @app.route('/')
