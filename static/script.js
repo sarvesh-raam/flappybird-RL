@@ -61,8 +61,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, { passive: false });
 
+    // Flag for debounce
+    let lastFlapTime = 0;
     function triggerFlap() {
-        if (nameScreen.classList.contains('hidden')) {
+        const now = Date.now();
+        if (nameScreen.classList.contains('hidden') && now - lastFlapTime > 50) {
+            lastFlapTime = now;
             fetch('/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -72,21 +76,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function updateLeaderboard() {
-        const res = await fetch('/leaderboard');
-        const data = await res.json();
-        let lbHtml = '';
-        data.board.forEach((entry, i) => {
-            lbHtml += `
-                <div class="lb-row">
-                    <span class="lb-name">${i + 1}. ${entry.name}</span>
-                    <span class="lb-score">${entry.score}</span>
-                </div>
-            `;
-        });
-        lbList.innerHTML = lbHtml || '<p style="color: grey; font-size: 0.8rem;">No scores yet</p>';
+        try {
+            const res = await fetch('/leaderboard');
+            const data = await res.json();
+            let lbHtml = '';
+            data.board.forEach((entry, i) => {
+                lbHtml += `
+                    <div class="lb-row">
+                        <span class="lb-name">${i + 1}. ${entry.name}</span>
+                        <span class="lb-score">${entry.score}</span>
+                    </div>
+                `;
+            });
+            lbList.innerHTML = lbHtml || '<p style="color: grey; font-size: 0.8rem;">No scores yet</p>';
+        } catch (e) { }
     }
 
-    // Main Update Loop
+    // Main Update Loop - Slowed down to 800ms to avoid 429 Rate Limit
     setInterval(async () => {
         try {
             const res = await fetch('/stats');
@@ -112,9 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // --- REALTIME SCORE SUBMISSION ---
-
-            // 1. Submit Human Score Immediately on Crash
+            // Realtime Score Submission
             if (data.done_h && data.score_h > 0 && !humanScoreSubmitted) {
                 fetch('/submit_score', {
                     method: 'POST',
@@ -124,13 +128,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 humanScoreSubmitted = true;
             }
 
-            // 2. Reset flags when human starts flying again
             if (data.is_running && !data.done_h) {
                 humanScoreSubmitted = false;
                 aiScoreSubmitted = false;
             }
 
-            // 3. Submit AI's Final Score
             if (data.done_a && data.score_a > 0 && !aiScoreSubmitted) {
                 fetch('/submit_score', {
                     method: 'POST',
@@ -139,13 +141,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 aiScoreSubmitted = true;
             }
+        } catch (e) { }
+    }, 800);
 
-        } catch (e) {
-            console.error('Stats update error:', e);
-        }
-    }, 150);
-
-    // Leaderboard Polling for true realtime 
-    setInterval(updateLeaderboard, 2000);
+    // Leaderboard Polling - Slowed to 15s
+    setInterval(updateLeaderboard, 15000);
     updateLeaderboard();
 });
+
