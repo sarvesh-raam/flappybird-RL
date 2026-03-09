@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastFlap = 0;
     function triggerFlap() {
         const now = Date.now();
-        if (!nameScreen.classList.contains('hidden') || now - lastFlap < 50) return;
+        if (!nameScreen.classList.contains('hidden') || now - lastFlap < 40) return;
         lastFlap = now;
         sendAction('flap');
     }
@@ -55,9 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
         bestH.innerText = data.best_h;
         best_A.innerText = data.best_a;
 
-        if (!data.running && data.done) {
+        // NEW: Overlay logic
+        if (!data.running || data.done_h) {
             overlay.classList.remove('hidden');
-            overlayTitle.innerText = data.score_h > 0 ? "GAME OVER" : "READY?";
+            overlayTitle.innerText = data.done_h && data.score_h > 0 ? "YOU CRASHED!" : "READY?";
+            document.getElementById('overlay-msg').innerText = "PRESS SPACE TO RESTART ARENA";
         } else {
             overlay.classList.add('hidden');
         }
@@ -72,14 +74,14 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { }
     }
 
-    // High speed sync (Turbo Mode) - Bundles images and stats
+    // High speed sync (12 FPS) - Optimized for butter-smooth visuals
     setInterval(async () => {
         if (!tabVisible || nameScreen.classList.contains('hidden') === false) return;
         try {
             const res = await fetch('/sync');
             handleSync(await res.json());
         } catch (e) { }
-    }, 150) // ~7 FPS sync for ultra efficiency on HF
+    }, 80) // 80ms = ~12.5 FPS. Optimal balance for stability vs lag.
 
     setInterval(updateLeaderboard, 30000);
 });
