@@ -197,16 +197,18 @@ def game_loop():
             if f_h is not None and f_a is not None:
                 # Merge full resolution
                 combined = np.hstack((f_h, f_a))
+                # Ensure memory layout is compatible with OpenCV (especially for newer versions on Linux)
+                combined = np.ascontiguousarray(combined)
                 
                 # Draw the divider
                 h, w, _ = combined.shape
                 cv2.line(combined, (w // 2, 0), (w // 2, h), (180, 180, 180), 2)
                 
                 bgr = cv2.cvtColor(combined, cv2.COLOR_RGB2BGR)
-                # Restored 90 quality as requested
                 ret, buffer = cv2.imencode('.jpg', bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                 if ret:
                     game.latest_frame = buffer.tobytes()
+
 
         except Exception as e:
             logger.error(f"FATAL GAME LOOP ERROR: {e}")
