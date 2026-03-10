@@ -63,89 +63,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function triggerFlap() {
         if (nameScreen.classList.contains('hidden')) {
-            // ZERO-LATENCY INPUT: Send immediately, don't wait for a loop
-            fetch('/action', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'flap' }),
-                keepalive: true
-            });
+            // ATOMIC PING: Fastest way to send data from browser to server
+            fetch('/f', { priority: 'high' });
         }
-    }
-
-    async function updateLeaderboard() {
-        const res = await fetch('/leaderboard');
-        const data = await res.json();
-        let lbHtml = '';
-        data.board.forEach((entry, i) => {
-            lbHtml += `
-                <div class="lb-row">
-                    <span class="lb-name">${i + 1}. ${entry.name}</span>
-                    <span class="lb-score">${entry.score}</span>
-                </div>
-            `;
-        });
-        lbList.innerHTML = lbHtml || '<p style="color: grey; font-size: 0.8rem;">No scores yet</p>';
     }
 
     // Main Update Loop
     setInterval(async () => {
         try {
             const res = await fetch('/stats');
-            const data = await res.json();
+            const d = await res.json();
 
-            scoreH.innerText = data.score_h;
-            scoreA.innerText = data.score_a;
-            bestH.innerText = data.best_h;
-            bestA.innerText = data.best_a;
+            scoreH.innerText = d.s_h;
+            scoreA.innerText = d.s_a;
+            bestH.innerText = d.b_h;
+            bestA.innerText = d.b_a;
 
             // Overlay Management
-            if (!data.is_running) {
+            if (!d.run) {
                 overlay.classList.remove('hidden');
                 overlayTitle.innerText = "READY?";
-                overlayMsg.innerText = "PRESS SPACE TO BATTLE";
+                overlayMsg.innerText = "PRESS SPACE";
             } else {
-                if (data.done_h) {
+                if (d.d_h) {
                     overlay.classList.remove('hidden');
-                    overlayTitle.innerText = "YOU CRASHED!";
-                    overlayMsg.innerText = "PRESS SPACE TO TRY AGAIN";
+                    overlayTitle.innerText = "YOU CRASHED";
+                    overlayMsg.innerText = "SPACE TO RETRY";
                 } else {
                     overlay.classList.add('hidden');
                 }
             }
-
-            // --- REALTIME SCORE SUBMISSION ---
-
-            // 1. Submit Human Score Immediately on Crash
-            if (data.done_h && data.score_h > 0 && !humanScoreSubmitted) {
-                fetch('/submit_score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: playerName, score: data.score_h })
-                }).then(() => updateLeaderboard());
-                humanScoreSubmitted = true;
-            }
-
-            // 2. Reset flags when human starts flying again
-            if (data.is_running && !data.done_h) {
-                humanScoreSubmitted = false;
-                aiScoreSubmitted = false;
-            }
-
-            // 3. Submit AI's Final Score
-            if (data.done_a && data.score_a > 0 && !aiScoreSubmitted) {
-                fetch('/submit_score', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: "AI", score: data.score_a })
-                });
-                aiScoreSubmitted = true;
-            }
-
-        } catch (e) {
-            console.error('Stats update error:', e);
-        }
-    }, 20);
+        } catch (e) { }
+    }, 40);
 
     // Leaderboard Polling
     setInterval(updateLeaderboard, 5000);
