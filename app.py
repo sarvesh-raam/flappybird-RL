@@ -90,6 +90,7 @@ class GameState:
         self.latest_frame = None
         self.player_name = "Guest"
         self.lock = threading.Lock()
+        self.frame_ready = threading.Event()
         
         # --- PRE-RENDER INITIAL FRAME ---
         fh = self.env_human.render()
@@ -216,6 +217,7 @@ def game_loop():
         elapsed = time.time() - loop_start
         sleep_time = max(0.005, 0.033 - elapsed)
         time.sleep(sleep_time)
+        game.frame_ready.set() # Signal that a frame is ready for delivery
 
 @app.route('/')
 def index():
@@ -224,10 +226,13 @@ def index():
 def gen_frames():
     global game
     while True:
+        # Wait for the next physics loop to finish before sending a frame
+        game.frame_ready.wait(timeout=1.0) 
+        game.frame_ready.clear()
+        
         if game.latest_frame:
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + game.latest_frame + b'\r\n')
-        time.sleep(0.03) # Sync with loop
 
 @app.route('/video_feed')
 def video_feed():

@@ -63,10 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function triggerFlap() {
         if (nameScreen.classList.contains('hidden')) {
+            // ZERO-LATENCY INPUT: Send immediately, don't wait for a loop
             fetch('/action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ type: 'flap' })
+                body: JSON.stringify({ type: 'flap' }),
+                keepalive: true
             });
         }
     }
