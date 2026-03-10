@@ -2,105 +2,120 @@
 <html>
 
 <head>
-    <title>Phoenix RL | Pure Python</title>
+    <title>Phoenix v13 | Official Python Engine</title>
     <style>
         body {
             background: #111;
             color: #fff;
-            font-family: sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             margin: 0;
-            overflow: hidden;
         }
 
-        .arena {
+        .arena-box {
             position: relative;
-            border: 4px solid #333;
-            border-radius: 8px;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+            border: 3px solid #444;
+            border-radius: 12px;
+            overflow: hidden;
             background: #000;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
         }
 
-        img {
+        #stream {
             display: block;
-            max-width: 100vw;
-            max-height: 80vh;
+            max-width: 95vw;
+            max-height: 75vh;
+        }
+
+        .stats-bar {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            font-size: 28px;
+            font-weight: 800;
+            background: #222;
+            margin-bottom: 2px;
         }
 
         .overlay {
             position: absolute;
-            top: 50%;
-            left: 25%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 10px;
-            text-align: center;
-            border: 2px solid #2ecc71;
-        }
-
-        .scores {
-            width: 100%;
+            top: 0;
+            left: 0;
+            width: 50%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.4);
             display: flex;
-            justify-content: space-around;
-            padding: 20px;
-            font-size: 24px;
-            font-weight: bold;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #2ecc71;
+            z-index: 10;
+            cursor: pointer;
         }
 
         .hidden {
             display: none;
         }
+
+        .best {
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 5px;
+        }
     </style>
 </head>
 
 <body>
-    <div class="scores">
-        <div>HUMAN: <span id="sh">0</span></div>
-        <div style="color: #2ecc71;">AI BRAIN: <span id="sa">0</span></div>
+    <div class="stats-bar">
+        <div>YOU: <span id="sh">0</span>
+            <div class="best">BEST: <span id="bh">0</span></div>
+        </div>
+        <div style="color: #2ecc71;">AI BRAIN: <span id="sa">0</span>
+            <div class="best">BEST: <span id="ba">0</span></div>
+        </div>
     </div>
 
-    <div class="arena">
-        <img src="/video" alt="Game Stream">
+    <div class="arena-box">
+        <img id="stream" src="/stream" alt="Loading Stream...">
         <div id="msg" class="overlay">
-            <h2>READY?</h2>
-            <p>SPACE TO FLY</p>
+            <h1>READY?</h1>
+            <p>SPACE OR CLICK TO FLY</p>
         </div>
     </div>
 
     <script>
-        const sh = document.getElementById('sh');
-        const sa = document.getElementById('sa');
+        const sh = document.getElementById('sh'); const bh = document.getElementById('bh');
+        const sa = document.getElementById('sa'); const ba = document.getElementById('ba');
         const msg = document.getElementById('msg');
 
-        // Instant Flap
-        window.onkeydown = (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                fetch('/flap');
-            }
-        };
+        const flap = () => fetch('/f');
 
-        // Stats UI loop
+        window.onkeydown = (e) => {
+            if (e.code === 'Space') { e.preventDefault(); flap(); }
+        };
+        msg.onclick = flap;
+
         setInterval(async () => {
             try {
                 const res = await fetch('/stats');
                 const d = await res.json();
-                sh.innerText = d.score_h;
-                sa.innerText = d.score_a;
+                sh.innerText = d.sh; bh.innerText = d.bh;
+                sa.innerText = d.sa; ba.innerText = d.ba;
 
-                if (!d.running || d.done_h) {
+                if (!d.run || d.dh) {
                     msg.classList.remove('hidden');
-                    if (d.done_h) msg.querySelector('h2').innerText = "CRASHED!";
+                    if (d.dh) msg.querySelector('h1').innerText = "CRASHED!";
                 } else {
                     msg.classList.add('hidden');
                 }
             } catch (e) { }
-        }, 100);
+        }, 50);
     </script>
 </body>
 
