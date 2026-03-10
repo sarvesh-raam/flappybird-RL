@@ -1,76 +1,107 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Flappy RL | Tournament Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <title>Phoenix RL | Pure Python</title>
+    <style>
+        body {
+            background: #111;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .arena {
+            position: relative;
+            border: 4px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+            background: #000;
+        }
+
+        img {
+            display: block;
+            max-width: 100vw;
+            max-height: 80vh;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 25%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            border: 2px solid #2ecc71;
+        }
+
+        .scores {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            padding: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 
 <body>
-    <div id="name-screen" class="modal-overlay">
-        <div class="modal-card glass">
-            <h2>WELCOME PILOT</h2>
-            <p>Enter your callsign to challenge the AI</p>
-            <input type="text" id="player-name-input" placeholder="YOUR NAME" maxlength="12">
-            <button id="start-btn">ENTER ARENA</button>
+    <div class="scores">
+        <div>HUMAN: <span id="sh">0</span></div>
+        <div style="color: #2ecc71;">AI BRAIN: <span id="sa">0</span></div>
+    </div>
+
+    <div class="arena">
+        <img src="/video" alt="Game Stream">
+        <div id="msg" class="overlay">
+            <h2>READY?</h2>
+            <p>SPACE TO FLY</p>
         </div>
     </div>
 
-    <button id="theme-btn" class="theme-toggle" title="Switch Theme">🌙</button>
+    <script>
+        const sh = document.getElementById('sh');
+        const sa = document.getElementById('sa');
+        const msg = document.getElementById('msg');
 
-    <div class="container">
-        <header>
-            <h1>FLAPPY <span class="accent">RL</span> TOURNAMENT</h1>
-            <p class="subtitle">Human vs AI</p>
-        </header>
+        // Instant Flap
+        window.onkeydown = (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                fetch('/flap');
+            }
+        };
 
-        <main class="dashboard">
-            <div class="main-display">
-                <div class="game-console glass">
-                    <div class="video-container">
-                        <img id="game-stream" src="{{ url_for('video_feed') }}" alt="Game Stream">
-                        <div id="overlay" class="overlay">
-                            <div class="overlay-card glass">
-                                <h2 id="overlay-title">READY?</h2>
-                                <p id="overlay-msg">PRESS SPACE TO BATTLE</p>
-                            </div>
-                        </div>
-                        <div class="v-line"></div>
-                    </div>
-                    <div class="labels">
-                        <span id="label-human">HUMAN</span>
-                        <span>AI</span>
-                    </div>
-                </div>
-            </div>
+        // Stats UI loop
+        setInterval(async () => {
+            try {
+                const res = await fetch('/stats');
+                const d = await res.json();
+                sh.innerText = d.score_h;
+                sa.innerText = d.score_a;
 
-            <div class="side-panel">
-                <div class="stats-panel">
-                    <div class="stat-card card glass green">
-                        <h3><span id="player-name-display">YOU</span></h3>
-                        <div id="score-h" class="big-num">0</div>
-                        <p>BEST: <span id="best-h">0</span></p>
-                    </div>
-                    <div class="stat-card card glass blue">
-                        <h3>AI</h3>
-                        <div id="score-a" class="big-num">0</div>
-                        <p>BEST: <span id="best-a">0</span></p>
-                    </div>
-                </div>
-
-                <div class="leaderboard card glass">
-                    <h3>🏆 LEADERBOARD</h3>
-                    <div id="leaderboard-list">
-                        <!-- Leaderboard rows injected here -->
-                    </div>
-                </div>
-            </div>
-        </main>
-    </div>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+                if (!d.running || d.done_h) {
+                    msg.classList.remove('hidden');
+                    if (d.done_h) msg.querySelector('h2').innerText = "CRASHED!";
+                } else {
+                    msg.classList.add('hidden');
+                }
+            } catch (e) { }
+        }, 100);
+    </script>
 </body>
 
 </html>
