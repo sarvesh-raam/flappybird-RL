@@ -12,25 +12,24 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Sync with Preservation
+      - name: Create Clean Push
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          # 1. Create a temporary folder for the clean version
+          mkdir deploy_folder
+          
+          # 2. Copy everything EXCEPT the large binaries and the .git folder
+          # This creates a "pure code" version of your project
+          rsync -rv --exclude '.git' --exclude '*.zip' --exclude 'legacy_models/' ./ deploy_folder/
+          
+          # 3. Initialize a BRAND NEW git repo in that folder
+          cd deploy_folder
+          git init
           git config --global user.email "sync-bot@example.com"
           git config --global user.name "Sync Bot"
-          
-          # Clone existing HF space state (preserves any large files already there)
-          git clone https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl hf_space
-          
-          # Copy code + AI model (it's only 0.4MB, safe to include!)
-          cp -rv app.py requirements.txt Dockerfile LICENSE README.md hf_space/
-          cp -rv templates/ hf_space/ 2>/dev/null || true
-          cp -rv static/ hf_space/ 2>/dev/null || true
-          # Copy the AI model zip if it exists in the repo
-          cp -v *.zip hf_space/ 2>/dev/null || echo "No zip files in repo"
-          
-          # Commit and push only if something changed
-          cd hf_space
           git add .
-          git diff-index --quiet HEAD || (git commit -m "Update code + AI model" && git push origin main)
-
+          git commit -m "Clean deployment sync"
+          
+          # 4. Push this "Zero History" version to Hugging Face
+          git push --force https://sarveshraam:$HF_TOKEN@huggingface.co/spaces/sarveshraam/flappybird-rl HEAD:main
