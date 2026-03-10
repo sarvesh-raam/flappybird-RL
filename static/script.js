@@ -143,9 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error('Stats update error:', e);
         }
-    }, 150);
+    }, 40);
 
-    // Leaderboard Polling for true realtime 
-    setInterval(updateLeaderboard, 2000);
+    // Leaderboard Polling
+    setInterval(updateLeaderboard, 5000);
     updateLeaderboard();
 });
