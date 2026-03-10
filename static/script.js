@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error('Stats update error:', e);
         }
-    }, 40);
+    }, 100);
 
     // Leaderboard Polling
     setInterval(updateLeaderboard, 5000);
