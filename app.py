@@ -196,7 +196,7 @@ def game_loop():
             f_a = game.env_ai.render()
             if f_h is not None and f_a is not None:
                 # Merge full resolution
-                combined = np.hstack((f_h, f_a))
+                combined = np.ascontiguousarray(np.hstack((f_h, f_a)))
                 
                 # Draw the divider
                 h, w, _ = combined.shape
