@@ -241,22 +241,31 @@ def action():
     
     if atype == 'flap':
         with game.lock:
-            if not game.is_running:
-                # Immediate Restart if game is stopped
-                logger.info(f"Restarting round for player: {game.player_name}")
+            # FORCE RESTART: If human is dead OR game is stopped, reset EVERYTHING.
+            if not game.is_running or game.done_h:
+                logger.info(f"Forcing Full Restart for {game.player_name}")
+                
+                # Save results of the previous round if it wasn't already stopped
+                if game.is_running:
+                     game.history.append({"id": game.total_ai_runs, "human": game.human_best_this_round, "ai": game.score_a})
+                     if len(game.history) > 5: game.history.pop(0)
+
+                # Reset Envs
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
+                
+                # Reset Stats
                 game.score_h = game.score_a = 0
                 game.done_h = game.done_a = False
                 game.human_best_this_round = 0
                 game.human_attempts += 1
                 game.total_ai_runs += 1
+                
                 game.is_running = True
-            elif game.done_h:
-                # Human crashed but AI still flying? Allow human to request reset.
-                game.reset_h = True
+                game.flap_human = False # Reset pending flaps
+                game.reset_h = False
             else:
-                # Normal flap
+                # Normal flap during flight
                 game.flap_human = True
     elif atype == 'set_name':
         game.player_name = data.get('name', 'Guest')
