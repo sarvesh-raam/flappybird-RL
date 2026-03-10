@@ -212,9 +212,9 @@ def game_loop():
             logger.error(f"FATAL GAME LOOP ERROR: {e}")
             time.sleep(1) 
             
-        # Target ~50hz loop for ultra fluidity
+        # Target ~30hz loop for perfect balance (Fix: AI was too fast)
         elapsed = time.time() - loop_start
-        sleep_time = max(0.002, 0.02 - elapsed)
+        sleep_time = max(0.005, 0.033 - elapsed)
         time.sleep(sleep_time)
 
 @app.route('/')
@@ -241,13 +241,9 @@ def action():
     
     if atype == 'flap':
         with game.lock:
-            if game.is_running:
-                if not game.done_h: game.flap_human = True
-                else: game.reset_h = True
-            else:
-                # Fresh Start
-                logger.info(f"Starting new round for player: {game.player_name}")
-                # birds are already reset by the end of round logic, but let's be sure
+            if not game.is_running:
+                # Immediate Restart if game is stopped
+                logger.info(f"Restarting round for player: {game.player_name}")
                 game.obs_h, _ = game.env_human.reset()
                 game.obs_a, _ = game.env_ai.reset()
                 game.score_h = game.score_a = 0
@@ -256,6 +252,12 @@ def action():
                 game.human_attempts += 1
                 game.total_ai_runs += 1
                 game.is_running = True
+            elif game.done_h:
+                # Human crashed but AI still flying? Allow human to request reset.
+                game.reset_h = True
+            else:
+                # Normal flap
+                game.flap_human = True
     elif atype == 'set_name':
         game.player_name = data.get('name', 'Guest')
         logger.info(f"Name set: {game.player_name}")
