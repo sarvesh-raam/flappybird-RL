@@ -128,7 +128,8 @@ h1 {
 #game-stream {
     width: 100%;
     display: block;
-    image-rendering: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
 }
 
 .v-line {
